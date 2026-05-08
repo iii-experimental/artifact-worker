@@ -1,13 +1,13 @@
-# Research note: narrow workers over broad wrappers
+# Research note: narrow Rust workers over broad wrappers
 
-`artifact-cli` starts from a simple observation: agents waste context when every integration is exposed as a broad wrapper. The better unit is a narrow worker that owns a specific job and registers a few stable functions.
+`artifact-cli` starts from a simple observation: agents waste context when every integration is exposed as a broad wrapper. The better unit is a narrow Rust worker that owns a specific job and registers a few stable iii functions.
 
 ## Narrow worker pattern
 
 ```text
 source artifact + job definition
   -> function plan
-  -> generated worker scaffold
+  -> generated Rust worker scaffold
   -> verification report
   -> iii registry
 ```
@@ -25,4 +25,4 @@ source artifact + job definition
 
 ## Design rule
 
-Generate the worker the agent needs, not the entire API surface the provider exposes.
+Generate the Rust worker the agent needs, not the entire API surface the provider exposes.

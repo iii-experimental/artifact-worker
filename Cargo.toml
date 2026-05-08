@@ -1,0 +1,28 @@
+[package]
+name = "artifact-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Turn APIs, specs, docs, and workflow artifacts into narrowly scoped iii workers."
+license = "MIT"
+repository = "https://github.com/rohitg00/artifact-cli"
+
+[lib]
+name = "artifact_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "artifact-cli-worker"
+path = "src/bin/artifact-cli-worker.rs"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+schemars = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+# iii-sdk is intentionally optional until the worker runtime API is pinned.
+# The core planner/generator is pure Rust and can be tested without an engine.
+
+[dev-dependencies]
+tempfile = "3.14"
