@@ -1,9 +1,19 @@
+use iii_sdk::{FunctionRef, InitOptions, RegisterFunction, RegisterServiceMessage, WorkerMetadata};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 pub type Result<T> = std::result::Result<T, ArtifactError>;
+
+pub const WORKER_NAME: &str = "artifact-cli-worker";
+pub const ARTIFACT_FUNCTION_IDS: [&str; 5] = [
+    "artifact::inspect",
+    "artifact::plan_worker",
+    "artifact::generate_worker",
+    "artifact::verify_worker",
+    "artifact::manifest",
+];
 
 #[derive(Debug, thiserror::Error)]
 pub enum ArtifactError {
@@ -40,6 +50,12 @@ pub struct ArtifactInput {
     #[serde(default)]
     pub functions: Vec<String>,
     pub output_dir: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct VerifyWorkerInput {
+    pub output_dir: PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -104,11 +120,80 @@ pub struct VerificationReport {
     pub missing_registrations: Vec<String>,
 }
 
-pub fn inspect_artifact(input: &ArtifactInput) -> InspectResult {
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtifactManifestPreview {
+    pub schema: String,
+    pub worker_name: String,
+    pub namespace: String,
+    pub functions: Vec<WorkerFunctionPlan>,
+    pub uses_workers: Vec<String>,
+}
+
+pub fn registered_function_ids() -> Vec<&'static str> {
+    ARTIFACT_FUNCTION_IDS.to_vec()
+}
+
+pub fn worker_metadata() -> WorkerMetadata {
+    WorkerMetadata {
+        runtime: "rust".into(),
+        version: env!("CARGO_PKG_VERSION").into(),
+        name: WORKER_NAME.into(),
+        os: format!(
+            "{} {} ({})",
+            std::env::consts::OS,
+            std::env::consts::ARCH,
+            std::env::consts::FAMILY
+        ),
+        pid: Some(std::process::id()),
+        telemetry: None,
+    }
+}
+
+pub fn init_options() -> InitOptions {
+    InitOptions {
+        metadata: Some(worker_metadata()),
+        ..Default::default()
+    }
+}
+
+pub fn register_artifact_primitives(iii: &iii_sdk::III) -> Vec<FunctionRef> {
+    iii.register_service(RegisterServiceMessage {
+        id: WORKER_NAME.into(),
+        name: "Artifact CLI Worker".into(),
+        description: Some("Plan, generate, verify, and manifest narrow Rust iii workers.".into()),
+        parent_service_id: None,
+    });
+
+    vec![
+        iii.register_function(
+            RegisterFunction::new("artifact::inspect", inspect_artifact)
+                .description("Inspect an artifact source and suggest narrow iii worker functions."),
+        ),
+        iii.register_function(
+            RegisterFunction::new("artifact::plan_worker", plan_worker)
+                .description("Create a narrow iii worker plan from an artifact description."),
+        ),
+        iii.register_function(
+            RegisterFunction::new("artifact::generate_worker", generate_worker)
+                .description("Generate a Rust iii worker scaffold from an artifact plan."),
+        ),
+        iii.register_function(
+            RegisterFunction::new("artifact::verify_worker", verify_worker)
+                .description("Run structural verification on a generated artifact worker."),
+        ),
+        iii.register_function(
+            RegisterFunction::new("artifact::manifest", artifact_manifest)
+                .description("Create a manifest preview for a generated artifact worker."),
+        ),
+    ]
+}
+
+pub fn inspect_artifact(input: ArtifactInput) -> Result<InspectResult> {
     let namespace = slugify(&input.name);
     let source_type = input.source_type.clone().unwrap_or_default();
-    let functions = infer_functions(input);
-    InspectResult {
+    let functions = infer_functions(&input);
+    Ok(InspectResult {
         name: input.name.clone(),
         namespace: namespace.clone(),
         source_type,
@@ -126,18 +211,18 @@ pub fn inspect_artifact(input: &ArtifactInput) -> InspectResult {
             "iii-sandbox".into(),
             "iii-observability".into(),
         ],
-    }
+    })
 }
 
-pub fn plan_worker(input: &ArtifactInput) -> WorkerPlan {
+pub fn plan_worker(input: ArtifactInput) -> Result<WorkerPlan> {
     let namespace = slugify(&input.name);
     let source_type = input.source_type.clone().unwrap_or_default();
-    let functions = infer_functions(input)
+    let functions = infer_functions(&input)
         .iter()
         .map(|function| plan_function(&namespace, function))
         .collect();
 
-    WorkerPlan {
+    Ok(WorkerPlan {
         worker_name: format!("{}-worker", namespace.replace('_', "-")),
         namespace: namespace.clone(),
         source_type,
@@ -160,11 +245,22 @@ pub fn plan_worker(input: &ArtifactInput) -> WorkerPlan {
             "Persist manifests and source fingerprints through iii-state.".into(),
             "Run generated code checks inside iii-sandbox before publishing.".into(),
         ],
-    }
+    })
 }
 
-pub fn generate_worker(input: &ArtifactInput) -> Result<GeneratedWorker> {
-    let plan = plan_worker(input);
+pub fn artifact_manifest(input: ArtifactInput) -> Result<ArtifactManifestPreview> {
+    let plan = plan_worker(input)?;
+    Ok(ArtifactManifestPreview {
+        schema: "artifact-cli.manifest.preview.v1".into(),
+        worker_name: plan.worker_name,
+        namespace: plan.namespace,
+        functions: plan.functions,
+        uses_workers: plan.uses_workers,
+    })
+}
+
+pub fn generate_worker(input: ArtifactInput) -> Result<GeneratedWorker> {
+    let plan = plan_worker(input.clone())?;
     let output_dir = input
         .output_dir
         .clone()
@@ -188,7 +284,11 @@ pub fn generate_worker(input: &ArtifactInput) -> Result<GeneratedWorker> {
     })
 }
 
-pub fn verify_worker(output_dir: impl AsRef<Path>) -> Result<VerificationReport> {
+pub fn verify_worker(input: VerifyWorkerInput) -> Result<VerificationReport> {
+    verify_worker_dir(input.output_dir)
+}
+
+pub fn verify_worker_dir(output_dir: impl AsRef<Path>) -> Result<VerificationReport> {
     let output_dir = output_dir.as_ref();
     let manifest_path = output_dir.join("artifact.manifest.json");
     let worker_path = output_dir.join("src/main.rs");
@@ -198,7 +298,9 @@ pub fn verify_worker(output_dir: impl AsRef<Path>) -> Result<VerificationReport>
         .functions
         .iter()
         .filter_map(|function| {
-            if worker_source.contains(&function.function_id) {
+            let has_id = worker_source.contains(&function.function_id);
+            let has_iii_registration = worker_source.contains("iii.register_function");
+            if has_id && has_iii_registration {
                 None
             } else {
                 Some(function.function_id.clone())
@@ -289,11 +391,16 @@ fn render_worker_source(plan: &WorkerPlan) -> String {
         .iter()
         .map(|function| {
             format!(
-                r#"    // iii.register_function(RegisterFunction::new("{function_id}", {handler_name}));
-    // TODO: implement {purpose}
+                r#"    iii.register_function(RegisterFunction::new("{function_id}", |payload: serde_json::Value| -> Result<serde_json::Value, String> {{
+        Ok(serde_json::json!({{
+            "ok": true,
+            "functionId": "{function_id}",
+            "payload": payload,
+            "todo": "implement {purpose}"
+        }}))
+    }}).description("{purpose}"));
 "#,
                 function_id = function.function_id,
-                handler_name = function.function_id.replace("::", "_"),
                 purpose = function.purpose
             )
         })
@@ -302,13 +409,23 @@ fn render_worker_source(plan: &WorkerPlan) -> String {
     format!(
         r#"//! Generated Rust iii worker scaffold for {worker_name}.
 //!
-//! Wire this file to `iii-sdk` once runtime registration is enabled for this worker.
-//! Function IDs are kept explicit so verification can catch drift.
+//! Function IDs are explicit so verification can catch drift.
+
+use iii_sdk::{{register_worker, InitOptions, RegisterFunction, RegisterServiceMessage}};
 
 fn main() {{
     let engine_url = std::env::var("III_URL").unwrap_or_else(|_| "ws://localhost:49134".to_string());
-    println!("starting {worker_name} against {{engine_url}}");
-{registrations}}}
+    let iii = register_worker(&engine_url, InitOptions::default());
+    iii.register_service(RegisterServiceMessage {{
+        id: "{worker_name}".into(),
+        name: "{worker_name}".into(),
+        description: Some("Generated artifact-cli Rust iii worker".into()),
+        parent_service_id: None,
+    }});
+{registrations}    println!("{worker_name} registered functions against {{engine_url}}");
+    std::thread::park();
+    iii.shutdown();
+}}
 "#,
         worker_name = plan.worker_name,
         registrations = registrations
@@ -324,9 +441,10 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
+iii-sdk = "0.12.0-next.1"
+schemars = "0.8"
 serde = {{ version = "1.0", features = ["derive"] }}
 serde_json = "1.0"
-# iii-sdk = "latest"
 "#,
         plan.worker_name
     )
@@ -340,7 +458,7 @@ fn render_worker_readme(plan: &WorkerPlan) -> String {
         .collect::<Vec<_>>()
         .join("\n");
     format!(
-        "# {}\n\nGenerated by artifact-cli.\n\n## Functions\n\n{}\n",
+        "# {}\n\nGenerated by artifact-cli as a Rust iii worker.\n\n## Functions\n\n{}\n",
         plan.worker_name, functions
     )
 }

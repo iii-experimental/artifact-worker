@@ -36,16 +36,23 @@ The point is not to generate every endpoint. The point is to generate the few fu
 - `iii-observability` — traces, logs, and generation/debug telemetry
 - `iii-bridge` — share generated workers across iii systems
 
-## Current Rust functions
+## Current Rust iii primitives
 
-The Rust core exposes:
+The Rust worker registers the same `artifact::*` function surface through `iii-sdk`:
 
-- `inspect_artifact` — classify a source artifact and suggest focused worker functions
-- `plan_worker` — produce a narrow worker plan from an artifact description
-- `generate_worker` — generate a Rust iii worker scaffold
-- `verify_worker` — run structural checks on a generated worker
+- `artifact::inspect` — classify a source artifact and suggest focused worker functions
+- `artifact::plan_worker` — produce a narrow worker plan from an artifact description
+- `artifact::generate_worker` — generate a Rust iii worker scaffold
+- `artifact::verify_worker` — run structural checks on a generated worker
+- `artifact::manifest` — create a manifest preview for registry/publish workflows
 
-The CLI binary exposes matching commands:
+Run it as a live iii worker:
+
+```bash
+cargo run --bin artifact-cli-worker -- serve --iii-url ws://localhost:49134
+```
+
+The CLI binary exposes matching local commands:
 
 ```bash
 cargo run --bin artifact-cli-worker -- plan \
@@ -54,14 +61,18 @@ cargo run --bin artifact-cli-worker -- plan \
   --source https://github.com/HackerNews/API
 ```
 
-Generate a Rust worker scaffold:
+Generate a Rust worker scaffold from a JSON payload:
 
 ```bash
 cargo run --bin artifact-cli-worker -- generate \
-  --name hackernews \
-  --source https://github.com/HackerNews/API \
-  --function top_stories,get_item,search_cached_stories \
+  --payload examples/hackernews.payload.json \
   --output-dir ./generated/hackernews-worker
+```
+
+Preview the iii manifest:
+
+```bash
+cargo run --bin artifact-cli-worker -- manifest --payload examples/hackernews.payload.json
 ```
 
 Verify it:
@@ -107,4 +118,4 @@ cargo run --bin artifact-cli-worker -- plan --name hackernews
 
 ## Status
 
-Early Rust MVP scaffold. The first implementation focuses on planning and generating Rust worker skeletons. Runtime registration against `iii-sdk` will be wired once the worker API surface is pinned for this repo.
+Production Rust worker. The binary can run as a live `iii-sdk` worker and register the full `artifact::*` function surface. Generated workers are also Rust and use `iii-sdk` registration APIs directly.
