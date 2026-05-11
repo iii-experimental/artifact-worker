@@ -1,7 +1,7 @@
 use artifact_cli::{
     artifact_manifest, generate_worker, inspect_artifact, install_plan, plan_worker,
     registered_function_ids, verify_worker, worker_catalog, worker_metadata, worker_recipes,
-    ArtifactInput, SourceType, VerifyWorkerInput,
+    ArtifactInput, RecipeStage, SourceType, VerifyWorkerInput,
 };
 
 #[test]
@@ -129,6 +129,40 @@ fn recipe_catalog_seeds_core_worker_targets() {
     ] {
         assert!(recipes.iter().any(|recipe| recipe.name == name), "{name}");
     }
+}
+
+#[test]
+fn recipe_catalog_is_prioritized_by_readiness() {
+    let recipes = worker_recipes();
+    let hackernews = recipes
+        .iter()
+        .find(|recipe| recipe.name == "hackernews")
+        .unwrap();
+    assert_eq!(hackernews.stage, RecipeStage::BuildNow);
+    assert!(hackernews.priority >= 90);
+    assert!(hackernews.integration.contains("public read-only"));
+    assert!(hackernews
+        .research_links
+        .iter()
+        .any(|link| link == "https://github.com/HackerNews/API"));
+
+    let producthunt = recipes
+        .iter()
+        .find(|recipe| recipe.name == "producthunt")
+        .unwrap();
+    assert_eq!(producthunt.stage, RecipeStage::ResearchFirst);
+    assert!(producthunt.integration.contains("GraphQL"));
+    assert!(producthunt.rationale.contains("research"));
+
+    let linear = recipes
+        .iter()
+        .find(|recipe| recipe.name == "linear")
+        .unwrap();
+    assert_eq!(linear.stage, RecipeStage::ResearchFirst);
+    assert!(linear
+        .research_links
+        .iter()
+        .any(|link| link == "https://linear.app/docs/api/"));
 }
 
 #[test]

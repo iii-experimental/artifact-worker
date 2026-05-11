@@ -79,7 +79,11 @@ cargo run --bin artifact -- generate \
   --out ./generated/digg-worker
 ```
 
-Other seeded recipes include Product Hunt, Hacker News, Linear, GitHub repo risk, Stripe, arXiv, Wikipedia, Sentry, Slack, Notion, and OpenRouter.
+Recipes are curated, not exhaustive. Each recipe has a stage, priority, integration surface, research links, and a reason it belongs in the roadmap.
+
+Build-now recipes are small read-only surfaces with low setup risk: Digg, Hacker News, arXiv, and Wikipedia.
+
+Research-first recipes have stronger auth, schema, rate-limit, privacy, or write-safety questions: Product Hunt, Linear, GitHub repo risk, Stripe, Sentry, Slack, Notion, and OpenRouter.
 
 Preview the iii manifest:
 
@@ -139,6 +143,16 @@ Each generated plan also includes:
 4. **Composable by default** — use existing iii workers for state, queues, cron, database, HTTP, sandboxing, and observability.
 5. **Inspectable artifacts** — every generated worker ships with a manifest and verification report.
 6. **No hidden side effects** — generated functions should declare whether they read, write, sync, or call external systems.
+
+## Recipe graduation
+
+A recipe only moves from `research_first` to `build_now` when it has:
+
+- a stable official or public source to integrate with
+- one repeated agent job that is clearer than a general API wrapper
+- known auth, scope, rate-limit, and cache behavior
+- an iii reuse plan for state, credentials, HTTP, database, observability, and MCP exposure
+- a smoke test that generates, verifies, and compiles the worker scaffold
 
 ## Development
 

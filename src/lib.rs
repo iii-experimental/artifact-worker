@@ -87,10 +87,26 @@ pub struct WorkerCatalog {
 pub struct WorkerRecipe {
     pub name: String,
     pub category: String,
+    pub stage: RecipeStage,
+    pub priority: u8,
+    pub integration: String,
     pub goal: String,
     pub source_hints: Vec<String>,
     pub default_functions: Vec<String>,
+    pub research_links: Vec<String>,
+    pub rationale: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RecipeStage {
+    BuildNow,
+    ResearchFirst,
+    Later,
+}
+
+type WorkerRecipeDetails<'a> = (&'a str, &'a str, &'a str);
+type WorkerRecipeSources<'a> = (&'a [&'a str], &'a [&'a str], &'a [&'a str]);
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -266,152 +282,260 @@ pub fn worker_recipes() -> Vec<WorkerRecipe> {
         worker_recipe(
             "digg",
             "media",
-            "Answer top stories, AI 1000 rank lookup, story search, highlights, and pipeline status.",
-            &["digg", "di.gg", "ai 1000"],
-            &[
-                "top_stories",
-                "author_rank",
-                "search_stories",
-                "story_highlights",
-                "pipeline_status",
-            ],
+            RecipeStage::BuildNow,
+            95,
+            (
+                "public web dataset",
+                "Answer top stories, AI 1000 rank lookup, story search, highlights, and pipeline status.",
+                "Small read-only surface with obvious agent questions and no account setup requirement.",
+            ),
+            (
+                &["digg", "di.gg", "ai 1000"],
+                &[
+                    "top_stories",
+                    "author_rank",
+                    "search_stories",
+                    "story_highlights",
+                    "pipeline_status",
+                ],
+                &["https://di.gg/ai"],
+            ),
         ),
         worker_recipe(
             "hackernews",
             "media",
-            "Give agents focused access to top stories, item lookup, and cached story search.",
-            &["hackernews", "hacker news", "news.ycombinator", "hn.algolia"],
-            &["top_stories", "get_item", "search_cached_stories"],
+            RecipeStage::BuildNow,
+            100,
+            (
+                "public read-only Firebase JSON",
+                "Give agents focused access to top stories, item lookup, and cached story search.",
+                "Canonical public API, no auth, stable repeated workflows, and a tiny worker surface.",
+            ),
+            (
+                &["hackernews", "hacker news", "news.ycombinator", "hn.algolia"],
+                &["top_stories", "get_item", "search_cached_stories"],
+                &["https://github.com/HackerNews/API"],
+            ),
         ),
         worker_recipe(
             "producthunt",
             "marketing",
-            "Track launches, maker profiles, topic search, and launch momentum.",
-            &["producthunt", "product hunt"],
-            &[
-                "top_launches",
-                "launch_details",
-                "maker_lookup",
-                "topic_search",
-                "launch_metrics",
-            ],
+            RecipeStage::ResearchFirst,
+            90,
+            (
+                "official GraphQL API with OAuth",
+                "Track launches, maker profiles, topic search, and launch momentum.",
+                "High demo value, but GraphQL auth and query shape should be researched before live handlers.",
+            ),
+            (
+                &["producthunt", "product hunt"],
+                &[
+                    "top_launches",
+                    "launch_details",
+                    "maker_lookup",
+                    "topic_search",
+                    "launch_metrics",
+                ],
+                &["https://www.producthunt.com/v2/docs"],
+            ),
         ),
         worker_recipe(
             "linear",
             "project_management",
-            "Summarize blocked work, stale issues, cycle risk, issue search, and team load.",
-            &["linear", "linear.app"],
-            &[
-                "blocked_issues",
-                "stale_issues",
-                "cycle_risk",
-                "issue_search",
-                "team_workload",
-            ],
+            RecipeStage::ResearchFirst,
+            88,
+            (
+                "official GraphQL API with API key or OAuth",
+                "Summarize blocked work, stale issues, cycle risk, issue search, and team load.",
+                "Strong agent use case, but schema, scopes, and workspace auth should be planned first.",
+            ),
+            (
+                &["linear", "linear.app"],
+                &[
+                    "blocked_issues",
+                    "stale_issues",
+                    "cycle_risk",
+                    "issue_search",
+                    "team_workload",
+                ],
+                &["https://linear.app/docs/api/"],
+            ),
         ),
         worker_recipe(
             "github_repo",
             "developer_tools",
-            "Summarize repo health, stale PRs, open issues, releases, and failing checks.",
-            &["github repo", "pull request", "github.com"],
-            &[
-                "repo_summary",
-                "stale_prs",
-                "open_issues",
-                "release_notes",
-                "ci_failures",
-            ],
+            RecipeStage::ResearchFirst,
+            86,
+            (
+                "GitHub API and local git metadata",
+                "Summarize repo health, stale PRs, open issues, releases, and failing checks.",
+                "Useful across nearly every project, but should be scoped around repo-risk jobs not full GitHub coverage.",
+            ),
+            (
+                &["github repo", "pull request", "github.com"],
+                &[
+                    "repo_summary",
+                    "stale_prs",
+                    "open_issues",
+                    "release_notes",
+                    "ci_failures",
+                ],
+                &["https://docs.github.com/en/rest"],
+            ),
         ),
         worker_recipe(
             "stripe",
             "payments",
-            "Inspect customer health, subscription risk, failed payments, invoices, and revenue snapshots.",
-            &["stripe"],
-            &[
-                "customer_summary",
-                "subscription_risk",
-                "failed_payments",
-                "invoice_lookup",
-                "revenue_snapshot",
-            ],
+            RecipeStage::ResearchFirst,
+            78,
+            (
+                "official REST API with account-scoped keys",
+                "Inspect customer health, subscription risk, failed payments, invoices, and revenue snapshots.",
+                "High-value business workflows, but money movement and account permissions make this research-first.",
+            ),
+            (
+                &["stripe"],
+                &[
+                    "customer_summary",
+                    "subscription_risk",
+                    "failed_payments",
+                    "invoice_lookup",
+                    "revenue_snapshot",
+                ],
+                &["https://docs.stripe.com/api"],
+            ),
         ),
         worker_recipe(
             "arxiv",
             "research",
-            "Search papers, summarize findings, inspect author trends, and build citation packs.",
-            &["arxiv", "arxiv.org"],
-            &[
-                "search_papers",
-                "paper_summary",
-                "author_trends",
-                "related_papers",
-                "citation_pack",
-            ],
+            RecipeStage::BuildNow,
+            82,
+            (
+                "public Atom query API",
+                "Search papers, summarize findings, inspect author trends, and build citation packs.",
+                "Public read-only metadata with a natural cache/search worker shape.",
+            ),
+            (
+                &["arxiv", "arxiv.org"],
+                &[
+                    "search_papers",
+                    "paper_summary",
+                    "author_trends",
+                    "related_papers",
+                    "citation_pack",
+                ],
+                &["https://arxiv.org/help/api/user-manual"],
+            ),
         ),
         worker_recipe(
             "wikipedia",
             "knowledge",
-            "Summarize pages, search topics, read sections, cite sources, and compare pages.",
-            &["wikipedia", "wikimedia"],
-            &[
-                "article_summary",
-                "topic_search",
-                "page_sections",
-                "citations",
-                "compare_pages",
-            ],
+            RecipeStage::BuildNow,
+            80,
+            (
+                "public MediaWiki REST and action APIs",
+                "Summarize pages, search topics, read sections, cite sources, and compare pages.",
+                "Public knowledge source where narrow citation and compare functions are more useful than raw API access.",
+            ),
+            (
+                &["wikipedia", "wikimedia"],
+                &[
+                    "article_summary",
+                    "topic_search",
+                    "page_sections",
+                    "citations",
+                    "compare_pages",
+                ],
+                &["https://www.mediawiki.org/wiki/API:REST_API"],
+            ),
         ),
         worker_recipe(
             "sentry",
             "monitoring",
-            "Summarize production issues, release regressions, trends, suspect commits, and alerts.",
-            &["sentry"],
-            &[
-                "issue_summary",
-                "release_regressions",
-                "error_trends",
-                "suspect_commits",
-                "alert_digest",
-            ],
+            RecipeStage::ResearchFirst,
+            76,
+            (
+                "official REST API with org/project auth",
+                "Summarize production issues, release regressions, trends, suspect commits, and alerts.",
+                "Good operational value, but org scopes, rate limits, and alert semantics need validation.",
+            ),
+            (
+                &["sentry"],
+                &[
+                    "issue_summary",
+                    "release_regressions",
+                    "error_trends",
+                    "suspect_commits",
+                    "alert_digest",
+                ],
+                &["https://docs.sentry.io/api/"],
+            ),
         ),
         worker_recipe(
             "slack",
             "productivity",
-            "Search channels, summarize threads, extract decisions, and prepare follow-ups.",
-            &["slack"],
-            &[
-                "channel_search",
-                "thread_summary",
-                "decision_digest",
-                "followups",
-                "user_context",
-            ],
+            RecipeStage::ResearchFirst,
+            72,
+            (
+                "Slack Web API with app tokens and scopes",
+                "Search channels, summarize threads, extract decisions, and prepare follow-ups.",
+                "Compelling agent memory workflows, but workspace scopes and data retention rules need deliberate design.",
+            ),
+            (
+                &["slack"],
+                &[
+                    "channel_search",
+                    "thread_summary",
+                    "decision_digest",
+                    "followups",
+                    "user_context",
+                ],
+                &["https://api.slack.com/web"],
+            ),
         ),
         worker_recipe(
             "notion",
             "productivity",
-            "Search workspace knowledge, summarize pages, inspect databases, and create update briefs.",
-            &["notion"],
-            &[
-                "workspace_search",
-                "page_summary",
-                "database_query",
-                "decision_log",
-                "update_brief",
-            ],
+            RecipeStage::ResearchFirst,
+            70,
+            (
+                "official REST API with integration permissions",
+                "Search workspace knowledge, summarize pages, inspect databases, and create update briefs.",
+                "Knowledge workflows are strong, but page/database capability gaps should be mapped before implementation.",
+            ),
+            (
+                &["notion"],
+                &[
+                    "workspace_search",
+                    "page_summary",
+                    "database_query",
+                    "decision_log",
+                    "update_brief",
+                ],
+                &["https://developers.notion.com/guides/get-started"],
+            ),
         ),
         worker_recipe(
             "openrouter",
             "ai",
-            "Compare model availability, pricing, capabilities, and routing fit.",
-            &["openrouter"],
-            &[
-                "model_search",
-                "model_compare",
-                "pricing_lookup",
-                "capability_filter",
-                "routing_recommendation",
-            ],
+            RecipeStage::ResearchFirst,
+            68,
+            (
+                "OpenAI-compatible API with model registry",
+                "Compare model availability, pricing, capabilities, and routing fit.",
+                "Useful for model routing, but needs current model/pricing research and cache policy before live calls.",
+            ),
+            (
+                &["openrouter"],
+                &[
+                    "model_search",
+                    "model_compare",
+                    "pricing_lookup",
+                    "capability_filter",
+                    "routing_recommendation",
+                ],
+                &["https://openrouter.ai/docs/api-reference/overview/"],
+            ),
         ),
     ]
 }
@@ -861,19 +985,27 @@ fn reusable_worker(
 fn worker_recipe(
     name: &str,
     category: &str,
-    goal: &str,
-    source_hints: &[&str],
-    default_functions: &[&str],
+    stage: RecipeStage,
+    priority: u8,
+    details: WorkerRecipeDetails<'_>,
+    sources: WorkerRecipeSources<'_>,
 ) -> WorkerRecipe {
+    let (integration, goal, rationale) = details;
+    let (source_hints, default_functions, research_links) = sources;
     WorkerRecipe {
         name: name.into(),
         category: category.into(),
+        stage,
+        priority,
+        integration: integration.into(),
         goal: goal.into(),
         source_hints: source_hints.iter().map(|value| (*value).into()).collect(),
         default_functions: default_functions
             .iter()
             .map(|value| (*value).into())
             .collect(),
+        research_links: research_links.iter().map(|value| (*value).into()).collect(),
+        rationale: rationale.into(),
     }
 }
 
