@@ -2,7 +2,7 @@
 
 Turn APIs, specs, docs, and workflow artifacts into narrowly scoped **Rust iii workers**.
 
-`artifact-cli` is a research project for agent-operable backend surfaces: instead of giving an agent a giant API wrapper or asking it to read docs at runtime, generate a focused Rust worker with a small set of precise iii functions.
+`artifact-cli` is a research project for agent-operable backend surfaces: instead of giving an agent a giant API wrapper or asking it to read docs at runtime, generate a focused Rust worker with a small set of precise iii functions and a concrete reuse plan for the iii engine and `iii-hq/workers`.
 
 ```text
 artifact -> narrow Rust iii worker -> callable functions
@@ -25,22 +25,19 @@ The point is not to generate every endpoint. The point is to generate the few fu
 
 ## How it fits iii
 
-`artifact-cli` composes with existing workers from [workers.iii.dev](https://workers.iii.dev/):
+`artifact-cli` composes with prebuilt iii surfaces instead of rebuilding platform plumbing:
 
-- `iii-state` — store manifests, source fingerprints, generated worker metadata
-- `iii-queue` — run generation and verification asynchronously
-- `iii-cron` — refresh synced artifacts on a schedule
-- `iii-database` — back generated workers with SQLite/Postgres mirrors
-- `iii-sandbox` — build and test generated workers in isolation
-- `iii-http` — expose generated functions as HTTP endpoints
-- `iii-observability` — traces, logs, and generation/debug telemetry
-- `iii-bridge` — share generated workers across iii systems
+- `iii-hq/iii` builtins — state, queue, cron, REST, stream, sandbox, observability
+- `iii-hq/workers` modules — credentials, shell, filesystem, database, MCP, skills, proof, model providers, hooks, sessions, policy
+
+The generated worker should only own the artifact-specific function logic. Storage, async execution, auth, local mirrors, browser verification, MCP exposure, and observability are delegated to reusable workers.
 
 ## Current Rust iii primitives
 
 The Rust worker registers the same `artifact::*` function surface through `iii-sdk`:
 
 - `artifact::inspect` — classify a source artifact and suggest focused worker functions
+- `artifact::catalog` — list reusable iii engine builtins and installable `iii-hq/workers`
 - `artifact::plan_worker` — produce a narrow worker plan from an artifact description
 - `artifact::generate_worker` — generate a Rust iii worker scaffold
 - `artifact::verify_worker` — run structural checks on a generated worker
@@ -55,6 +52,8 @@ cargo run --bin artifact-cli-worker -- serve --iii-url ws://localhost:49134
 The CLI binary exposes matching local commands:
 
 ```bash
+cargo run --bin artifact-cli-worker -- catalog
+
 cargo run --bin artifact-cli-worker -- plan \
   --name hackernews \
   --goal "give agents focused access to top stories and item lookup" \
@@ -87,6 +86,7 @@ cargo run --bin artifact-cli-worker -- verify --output-dir ./generated/hackernew
 generated/hackernews-worker/
   Cargo.toml
   src/main.rs
+  iii.worker.yaml
   artifact.manifest.json
   README.md
 ```
@@ -98,6 +98,13 @@ hackernews::top_stories
 hackernews::get_item
 hackernews::search_cached_stories
 ```
+
+Each generated plan also includes:
+
+- `usesWorkers` — all selected iii builtins and installable workers
+- `reusePlan.engineBuiltins` — functions already provided by `iii-hq/iii`
+- `reusePlan.installableWorkers` — `iii worker add <name>` dependencies from `iii-hq/workers`
+- `reusePlan.missingCapabilities` — anything artifact-cli could not map to a reusable worker
 
 ## Principles
 
@@ -113,6 +120,7 @@ hackernews::search_cached_stories
 ```bash
 cargo fmt
 cargo test
+cargo run --bin artifact-cli-worker -- catalog
 cargo run --bin artifact-cli-worker -- plan --name hackernews
 ```
 
