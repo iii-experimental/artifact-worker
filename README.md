@@ -8,6 +8,22 @@ Turn APIs, specs, docs, and workflow artifacts into narrowly scoped **Rust iii w
 artifact -> narrow Rust iii worker -> callable functions
 ```
 
+The intended iii-native UX is:
+
+```bash
+iii convert https://github.com/HackerNews/API \
+  --goal "top stories and item lookup" \
+  --out generated/hackernews-worker
+
+iii convert --payload examples/producthunt.payload.json \
+  --out generated/producthunt-worker
+
+iii worker run generated/producthunt-worker
+iii trigger --function-id producthunt::top_launches --payload '{"limit":3}'
+```
+
+Today, the standalone `artifact` binary provides the same generation flow while `iii convert` is being wired into the iii CLI surface.
+
 ## Why this exists
 
 Agents are better when they call stable functions instead of browsing docs, guessing endpoints, or stitching workflows from scratch. `artifact-cli` creates small iii-native Rust workers around a specific job:
@@ -107,6 +123,38 @@ Call a registered generated function:
 
 ```bash
 cargo run --bin artifact -- call hackernews::top_stories --json '{"limit":10}'
+```
+
+## Planned iii-native command
+
+`artifact-cli` is a worker factory, so the final public command should feel like part of iii rather than like a separate generator. The target shape is `iii convert`: convert a URL, spec, HAR, docs page, or payload into a focused iii worker.
+
+```bash
+iii convert <source-or-url> \
+  --goal "<agent job>" \
+  --out <worker-dir>
+```
+
+Payload mode should stay first-class for repeatable builds:
+
+```bash
+iii convert --payload examples/digg.payload.json \
+  --out generated/digg-worker
+```
+
+Worker lifecycle remains native iii:
+
+```bash
+iii worker run generated/digg-worker
+iii trigger --function-id digg::top_stories --payload '{"limit":3}'
+```
+
+Until `iii convert` is available, use the current equivalent:
+
+```bash
+cargo run --bin artifact -- generate \
+  --payload examples/digg.payload.json \
+  --out generated/digg-worker
 ```
 
 ## Live generated worker demos
