@@ -1,7 +1,7 @@
 use artifact_cli::{
     artifact_manifest, convert_artifact, generate_worker, inspect_artifact, install_plan,
     plan_worker, registered_function_ids, verify_worker, worker_catalog, worker_metadata,
-    worker_recipes, ArtifactInput, ConvertArtifactInput, RecipeStage, SourceType,
+    worker_recipes, ArtifactError, ArtifactInput, ConvertArtifactInput, RecipeStage, SourceType,
     VerifyWorkerInput,
 };
 
@@ -338,6 +338,38 @@ fn convert_artifact_infers_name_from_url_payload() {
         .functions
         .iter()
         .any(|function| function.function_id == "hackernews::top_stories"));
+}
+
+#[test]
+fn convert_artifact_trims_source_before_inference_and_output() {
+    let tmp = tempfile::tempdir().unwrap();
+    let generated = convert_artifact(ConvertArtifactInput {
+        source: Some("  https://github.com/HackerNews/API\n".into()),
+        goal: Some("top stories and item lookup".into()),
+        output_dir: Some(tmp.path().to_path_buf()),
+        ..Default::default()
+    })
+    .unwrap();
+
+    assert_eq!(
+        generated.plan.source.as_deref(),
+        Some("https://github.com/HackerNews/API")
+    );
+    assert_eq!(generated.plan.namespace, "hackernews");
+    assert_eq!(generated.plan.source_type, SourceType::Url);
+}
+
+#[test]
+fn convert_artifact_rejects_explicit_blank_source() {
+    let error = convert_artifact(ConvertArtifactInput {
+        name: Some("manual".into()),
+        source: Some(" \n\t ".into()),
+        ..Default::default()
+    })
+    .unwrap_err();
+
+    assert!(matches!(error, ArtifactError::InvalidInput(_)));
+    assert!(error.to_string().contains("source/url cannot be blank"));
 }
 
 #[test]

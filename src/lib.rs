@@ -665,10 +665,21 @@ pub fn generate_worker(input: ArtifactInput) -> Result<GeneratedWorker> {
 
 impl ConvertArtifactInput {
     fn into_artifact_input(self) -> Result<ArtifactInput> {
-        let source = self.source;
+        let source = match self.source {
+            Some(source) => {
+                let source = source.trim().to_string();
+                if source.is_empty() {
+                    return Err(ArtifactError::InvalidInput(
+                        "source/url cannot be blank for artifact::convert".into(),
+                    ));
+                }
+                Some(source)
+            }
+            None => None,
+        };
         let name = match (self.name, source.as_deref()) {
             (Some(name), _) if !name.trim().is_empty() => name,
-            (_, Some(source)) if !source.trim().is_empty() => infer_name_from_source(source),
+            (_, Some(source)) => infer_name_from_source(source),
             _ => {
                 return Err(ArtifactError::InvalidInput(
                     "provide name or url/source for artifact::convert".into(),
