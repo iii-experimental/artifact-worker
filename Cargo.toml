@@ -1,18 +1,18 @@
 [package]
-name = "artifact-cli"
+name = "artifact-worker"
 version = "0.1.0"
 edition = "2021"
-description = "Turn APIs, specs, docs, and workflow artifacts into narrowly scoped iii workers."
+description = "Turn MCP servers, APIs, specs, docs, and workflow artifacts into narrowly scoped iii workers."
 license = "MIT"
-repository = "https://github.com/rohitg00/artifact-cli"
+repository = "https://github.com/iii-experimental/artifact-worker"
 
 [lib]
-name = "artifact_cli"
+name = "artifact_worker"
 path = "src/lib.rs"
 
 [[bin]]
-name = "artifact-cli-worker"
-path = "src/bin/artifact-cli-worker.rs"
+name = "artifact-worker"
+path = "src/bin/artifact-worker.rs"
 
 [[bin]]
 name = "artifact"

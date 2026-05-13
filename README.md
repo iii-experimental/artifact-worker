@@ -1,8 +1,8 @@
-# artifact-cli
+# artifact-worker
 
 Turn MCP servers, APIs, specs, docs, and workflow artifacts into narrowly scoped **Rust iii workers**.
 
-`artifact-cli` is the repo/crate name. The product surface should be the `artifact::*` iii worker. Instead of giving an agent a giant MCP tool catalog, a broad API wrapper, or docs to read at runtime, `artifact::convert` generates a focused Rust worker with a small set of precise iii functions and a concrete reuse plan for the iii engine and `iii-hq/workers`.
+`artifact-worker` is the repo/crate name. The product surface is the `artifact::*` iii worker. Instead of giving an agent a giant MCP tool catalog, a broad API wrapper, or docs to read at runtime, `artifact::convert` generates a focused Rust worker with a small set of precise iii functions and a concrete reuse plan for the iii engine and `iii-hq/workers`.
 
 ```text
 MCP/spec/docs -> artifact::convert -> narrow Rust iii worker -> iii/HTTP-invokable functions
@@ -11,7 +11,7 @@ MCP/spec/docs -> artifact::convert -> narrow Rust iii worker -> iii/HTTP-invokab
 The intended iii-native UX is worker-first:
 
 ```bash
-cargo run --bin artifact-cli-worker -- serve --iii-url ws://localhost:49134
+cargo run --bin artifact-worker -- serve --iii-url ws://localhost:49134
 
 iii trigger --function-id artifact::convert --payload '{
   "url": "https://github.com/HackerNews/API",
@@ -45,14 +45,14 @@ The standalone `artifact` binary is a development convenience for local generati
 Artifact is still pre-v1, so install from the repo while the worker surface stabilizes:
 
 ```bash
-cargo install --git https://github.com/rohitg00/artifact-cli --bin artifact-cli-worker
-artifact-cli-worker serve --iii-url ws://localhost:49134
+cargo install --git https://github.com/iii-experimental/artifact-worker --bin artifact-worker
+artifact-worker serve --iii-url ws://localhost:49134
 ```
 
 Install the development binary only when you are working on generator internals or local demos:
 
 ```bash
-cargo install --git https://github.com/rohitg00/artifact-cli --bin artifact
+cargo install --git https://github.com/iii-experimental/artifact-worker --bin artifact
 ```
 
 ## Why this exists
@@ -113,7 +113,7 @@ The Rust worker registers the same `artifact::*` function surface through `iii-s
 Run it as a live iii worker:
 
 ```bash
-cargo run --bin artifact-cli-worker -- serve --iii-url ws://localhost:49134
+cargo run --bin artifact-worker -- serve --iii-url ws://localhost:49134
 ```
 
 The worker function surface is the primary interface. The standalone binary is the local development doorway for generation, verification, install plans, and demos:
@@ -590,4 +590,4 @@ cargo run --bin artifact -- from https://github.com/HackerNews/API --goal "top s
 
 ## Status
 
-Production Rust worker plus development `artifact` binary. `artifact-cli-worker` can run as a live `iii-sdk` worker and register the full `artifact::*` function surface, including `artifact::convert`. Generated workers are also Rust and use `iii-sdk` registration APIs directly.
+Production Rust worker plus development `artifact` binary. `artifact-worker` can run as a live `iii-sdk` worker and register the full `artifact::*` function surface, including `artifact::convert`. Generated workers are also Rust and use `iii-sdk` registration APIs directly.

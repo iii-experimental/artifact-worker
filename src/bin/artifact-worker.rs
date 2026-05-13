@@ -1,4 +1,4 @@
-use artifact_cli::{
+use artifact_worker::{
     artifact_manifest, generate_worker, init_options, inspect_artifact, plan_worker,
     register_artifact_primitives, verify_worker, worker_catalog, worker_recipes, ArtifactInput,
     SourceType, VerifyWorkerInput,
@@ -7,8 +7,8 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
-#[command(name = "artifact-cli-worker")]
-#[command(about = "Rust-first artifact-cli iii worker utility")]
+#[command(name = "artifact-worker")]
+#[command(about = "Rust-first Artifact iii worker utility")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -109,7 +109,7 @@ fn main() -> anyhow::Result<()> {
             let iii = iii_sdk::register_worker(&iii_url, init_options());
             let refs = register_artifact_primitives(&iii);
             eprintln!(
-                "artifact-cli-worker registered {} artifact::* iii functions against {}",
+                "artifact-worker registered {} artifact::* iii functions against {}",
                 refs.len(),
                 iii_url
             );

@@ -1,6 +1,6 @@
 # Research note: narrow Rust workers over broad wrappers
 
-`artifact-cli` starts from a simple observation: agents waste context when every integration is exposed as a broad wrapper. The better unit is a narrow Rust worker that owns a specific job, registers a few stable iii functions, and reuses the iii platform for everything that is already solved.
+Artifact starts from a simple observation: agents waste context when every integration is exposed as a broad wrapper. The better unit is a narrow Rust worker that owns a specific job, registers a few stable iii functions, and reuses the iii platform for everything that is already solved.
 
 ## Narrow worker pattern
 
@@ -41,4 +41,4 @@ Generate the Rust worker the agent needs, not the entire API surface the provide
 
 ## Reuse rule
 
-If a capability is already in `iii-hq/iii` or `iii-hq/workers`, artifact-cli should record it in the plan and generated manifest instead of generating duplicate code.
+If a capability is already in `iii-hq/iii` or `iii-hq/workers`, Artifact should record it in the plan and generated manifest instead of generating duplicate code.
