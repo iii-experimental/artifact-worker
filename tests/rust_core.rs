@@ -1,4 +1,4 @@
-use artifact_cli::{
+use artifact_worker::{
     artifact_manifest, convert_artifact, generate_worker, inspect_artifact, install_plan,
     plan_worker, registered_function_ids, verify_worker, worker_catalog, worker_metadata,
     worker_recipes, ArtifactError, ArtifactInput, ConvertArtifactInput, RecipeStage, SourceType,
@@ -248,7 +248,7 @@ fn infers_producthunt_and_linear_from_recipe_catalog() {
 }
 
 #[test]
-fn manifest_matches_old_artifact_manifest_function_surface() {
+fn manifest_matches_artifact_worker_manifest_function_surface() {
     let input = ArtifactInput {
         name: "hackernews".into(),
         goal: Some("focused agent access to top stories".into()),
@@ -260,7 +260,7 @@ fn manifest_matches_old_artifact_manifest_function_surface() {
 
     let manifest = artifact_manifest(input).unwrap();
 
-    assert_eq!(manifest.schema, "artifact-cli.manifest.preview.v1");
+    assert_eq!(manifest.schema, "artifact-worker.manifest.preview.v1");
     assert_eq!(manifest.worker_name, "hackernews-worker");
     assert_eq!(manifest.functions.len(), 2);
     assert!(manifest.uses_workers.contains(&"iii-sandbox".to_string()));
@@ -289,7 +289,7 @@ fn exposes_the_same_artifact_function_ids_as_iii_primitives() {
 
     let metadata = worker_metadata();
     assert_eq!(metadata.runtime, "rust");
-    assert_eq!(metadata.name, "artifact-cli-worker");
+    assert_eq!(metadata.name, "artifact-worker");
 }
 
 #[test]

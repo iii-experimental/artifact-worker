@@ -1,4 +1,4 @@
-use artifact_cli::{
+use artifact_worker::{
     artifact_manifest, generate_worker, init_options, inspect_artifact, install_plan, plan_worker,
     register_artifact_primitives, verify_worker, worker_catalog, worker_recipes, ArtifactInput,
     SourceType, VerifyWorkerInput,
