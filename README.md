@@ -75,7 +75,7 @@ The artifact crate is infrastructure: parsing, planning, generation, verificatio
 Artifact composes with prebuilt iii surfaces instead of rebuilding platform plumbing:
 
 - `iii-hq/iii` builtins — state, queue, cron, REST, stream, sandbox, observability
-- `iii-hq/workers` modules — credentials, shell, filesystem, database, MCP, skills, proof, model providers, hooks, sessions, policy
+- `iii-hq/workers` — credentials, shell, filesystem, database, MCP, skills, proof, model providers, hooks, sessions, policy
 
 The generated worker should only own the artifact-specific function logic. Storage, async execution, auth, local mirrors, browser verification, MCP exposure, and observability are delegated to reusable workers.
 

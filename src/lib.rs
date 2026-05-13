@@ -256,7 +256,7 @@ pub fn register_artifact_primitives(iii: &iii_sdk::III) -> Vec<FunctionRef> {
                 |_payload: serde_json::Value| -> Result<WorkerCatalog> { Ok(worker_catalog()) },
             )
             .description(
-                "List iii engine builtins and iii-hq/workers modules Artifact can reuse.",
+                "List iii engine builtins and reusable iii-hq/workers for Artifact.",
             ),
         ),
         iii.register_function(
