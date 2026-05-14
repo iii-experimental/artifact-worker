@@ -58,7 +58,7 @@ Working locally:
 - MCP HTTP tool discovery and invocation
 - MCP stdio tool discovery and invocation
 - Function replacement when the same spec is converted again
-- Public virtual worker grouping in `engine::workers::list`
+- Public worker grouping in `engine::workers::list`
 - Public `engine::functions::list` without internal metadata
 
 Still pre-v1:
@@ -67,7 +67,7 @@ Still pre-v1:
 - Write-capable APIs need a stricter safety policy before this should be used
   broadly.
 - The paired iii engine changes must ship with spec-to-worker for the full
-  virtual worker behavior.
+  generated worker grouping behavior.
 
 ## Install
 
@@ -268,13 +268,14 @@ Expected shape:
 ]
 ```
 
-Generated groups should appear as virtual workers:
+Generated groups should appear as normal worker groups. The implementation
+detail that they are engine-routed is not part of the public shape:
 
 ```bash
 iii trigger \
   --function-id engine::workers::list \
   --payload '{}' |
-  jq '[.workers[] | select(.name == "context7-stdio-worker") | {id, name, virtual_worker, isolation, functions}]'
+  jq '[.workers[] | select(.name == "context7-stdio-worker") | {id, name, functions}]'
 ```
 
 Expected output:
@@ -282,10 +283,8 @@ Expected output:
 ```json
 [
   {
-    "id": "virtual:context7-stdio-worker",
+    "id": "context7-stdio-worker",
     "name": "context7-stdio-worker",
-    "virtual_worker": true,
-    "isolation": "virtual",
     "functions": [
       "context7_stdio::query_docs",
       "context7_stdio::resolve_library_id"
@@ -347,6 +346,6 @@ The current local branch was verified with:
 - live Context7 MCP HTTP conversion and React docs query
 - duplicate conversion replacement for OpenAPI and MCP stdio
 - public function visibility check
-- public virtual worker grouping check
+- public worker grouping check
 
 No release has been created from these changes yet.
