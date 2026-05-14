@@ -1,24 +1,24 @@
-use artifact_worker::{
-    convert_artifact_for_iii, registered_function_ids, worker_metadata, ArtifactError,
-    ConvertArtifactInput, SourceType,
+use spec_to_worker::{
+    convert_spec_to_worker_for_iii, registered_function_ids, worker_metadata,
+    ConvertSpecToWorkerInput, SourceType, SpecToWorkerError,
 };
 
 #[test]
 fn exposes_only_convert_as_public_worker_surface() {
-    assert_eq!(registered_function_ids(), vec!["artifact::convert"]);
+    assert_eq!(registered_function_ids(), vec!["spec-to-worker::convert"]);
 
     let metadata = worker_metadata();
     assert_eq!(metadata.runtime, "rust");
-    assert_eq!(metadata.name, "artifact-worker");
+    assert_eq!(metadata.name, "spec-to-worker");
 }
 
 #[test]
 fn convert_rejects_blank_source_before_any_registration() {
-    let iii = iii_sdk::register_worker("ws://localhost:1", artifact_worker::init_options());
+    let iii = iii_sdk::register_worker("ws://localhost:1", spec_to_worker::init_options());
 
-    let error = convert_artifact_for_iii(
+    let error = convert_spec_to_worker_for_iii(
         &iii,
-        ConvertArtifactInput {
+        ConvertSpecToWorkerInput {
             name: Some("blank".into()),
             source: Some(" \n\t ".into()),
             ..Default::default()
@@ -27,17 +27,17 @@ fn convert_rejects_blank_source_before_any_registration() {
     .unwrap_err();
     iii.shutdown();
 
-    assert!(matches!(error, ArtifactError::InvalidInput(_)));
+    assert!(matches!(error, SpecToWorkerError::InvalidInput(_)));
     assert!(error.to_string().contains("source/url cannot be blank"));
 }
 
 #[test]
 fn convert_rejects_non_openapi_non_mcp_sources() {
-    let iii = iii_sdk::register_worker("ws://localhost:1", artifact_worker::init_options());
+    let iii = iii_sdk::register_worker("ws://localhost:1", spec_to_worker::init_options());
 
-    let error = convert_artifact_for_iii(
+    let error = convert_spec_to_worker_for_iii(
         &iii,
-        ConvertArtifactInput {
+        ConvertSpecToWorkerInput {
             name: Some("plain url".into()),
             source_type: Some(SourceType::Url),
             source: Some("https://example.com".into()),
@@ -47,7 +47,7 @@ fn convert_rejects_non_openapi_non_mcp_sources() {
     .unwrap_err();
     iii.shutdown();
 
-    assert!(matches!(error, ArtifactError::InvalidInput(_)));
+    assert!(matches!(error, SpecToWorkerError::InvalidInput(_)));
     assert!(error
         .to_string()
         .contains("supports open_api and mcp sources"));
@@ -93,11 +93,11 @@ fn convert_registers_openapi_json_as_http_invoked_functions() {
 }"#,
     )
     .unwrap();
-    let iii = iii_sdk::register_worker("ws://localhost:1", artifact_worker::init_options());
+    let iii = iii_sdk::register_worker("ws://localhost:1", spec_to_worker::init_options());
 
-    let converted = convert_artifact_for_iii(
+    let converted = convert_spec_to_worker_for_iii(
         &iii,
-        ConvertArtifactInput {
+        ConvertSpecToWorkerInput {
             name: Some("demo".into()),
             source: Some(format!("  {}\n", spec_path.display())),
             ..Default::default()
@@ -151,11 +151,11 @@ paths:
 "#,
     )
     .unwrap();
-    let iii = iii_sdk::register_worker("ws://localhost:1", artifact_worker::init_options());
+    let iii = iii_sdk::register_worker("ws://localhost:1", spec_to_worker::init_options());
 
-    let converted = convert_artifact_for_iii(
+    let converted = convert_spec_to_worker_for_iii(
         &iii,
-        ConvertArtifactInput {
+        ConvertSpecToWorkerInput {
             name: Some("demo".into()),
             source: Some(spec_path.display().to_string()),
             ..Default::default()
@@ -196,15 +196,15 @@ fn convert_replaces_existing_http_invoked_functions() {
 }"#,
     )
     .unwrap();
-    let iii = iii_sdk::register_worker("ws://localhost:1", artifact_worker::init_options());
-    let input = ConvertArtifactInput {
+    let iii = iii_sdk::register_worker("ws://localhost:1", spec_to_worker::init_options());
+    let input = ConvertSpecToWorkerInput {
         name: Some("replace demo".into()),
         source: Some(spec_path.display().to_string()),
         ..Default::default()
     };
 
-    let first = convert_artifact_for_iii(&iii, input.clone()).unwrap();
-    let second = convert_artifact_for_iii(&iii, input).unwrap();
+    let first = convert_spec_to_worker_for_iii(&iii, input.clone()).unwrap();
+    let second = convert_spec_to_worker_for_iii(&iii, input).unwrap();
     iii.shutdown();
 
     assert_eq!(first.mode, "http_invocation");
@@ -218,11 +218,11 @@ fn convert_replaces_existing_http_invoked_functions() {
 
 #[test]
 fn convert_registers_named_mcp_endpoint_functions() {
-    let iii = iii_sdk::register_worker("ws://localhost:1", artifact_worker::init_options());
+    let iii = iii_sdk::register_worker("ws://localhost:1", spec_to_worker::init_options());
 
-    let converted = convert_artifact_for_iii(
+    let converted = convert_spec_to_worker_for_iii(
         &iii,
-        ConvertArtifactInput {
+        ConvertSpecToWorkerInput {
             name: Some("github mcp".into()),
             source_type: Some(SourceType::Mcp),
             source: Some("https://example.com/mcp".into()),
@@ -249,11 +249,11 @@ fn convert_registers_named_mcp_endpoint_functions() {
 #[test]
 fn convert_discovers_mcp_http_tools() {
     let url = spawn_mock_mcp_server(true);
-    let iii = iii_sdk::register_worker("ws://localhost:1", artifact_worker::init_options());
+    let iii = iii_sdk::register_worker("ws://localhost:1", spec_to_worker::init_options());
 
-    let converted = convert_artifact_for_iii(
+    let converted = convert_spec_to_worker_for_iii(
         &iii,
-        ConvertArtifactInput {
+        ConvertSpecToWorkerInput {
             name: Some("docs mcp".into()),
             source: Some(url.clone()),
             ..Default::default()
@@ -302,11 +302,11 @@ esac
 "#,
     )
     .unwrap();
-    let iii = iii_sdk::register_worker("ws://localhost:1", artifact_worker::init_options());
+    let iii = iii_sdk::register_worker("ws://localhost:1", spec_to_worker::init_options());
 
-    let converted = convert_artifact_for_iii(
+    let converted = convert_spec_to_worker_for_iii(
         &iii,
-        ConvertArtifactInput {
+        ConvertSpecToWorkerInput {
             name: Some("stdio docs".into()),
             command: Some("sh".into()),
             args: vec![script_path.display().to_string()],

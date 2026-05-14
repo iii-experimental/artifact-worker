@@ -1,12 +1,12 @@
 # Research note: automatic OpenAPI and MCP conversion
 
-Artifact should behave like an iii worker, not a local code generator.
+Spec-to-worker should behave like an iii worker, not a local code generator.
 
 The core path is:
 
 ```text
 OpenAPI or MCP input
-  -> artifact::convert
+  -> spec-to-worker::convert
   -> discovered operations/tools
   -> engine HTTP-invoked iii functions
   -> normal iii trigger calls from any worker
@@ -14,13 +14,13 @@ OpenAPI or MCP input
 
 ## Product rule
 
-The public surface is one function: `artifact::convert`.
+The public surface is one function: `spec-to-worker::convert`.
 
 Do not ask users to pick from prewritten integrations, edit generated files, or run a separate local CLI before they can call the result. For OpenAPI and MCP inputs, conversion should happen by discovery and registration.
 
 ## Engine rule
 
-Artifact registers each discovered operation/tool through the engine HTTP invocation path. The internal grouping hint lives under `metadata.iii.virtualWorker`; the engine consumes and strips that hint before public function listing.
+Spec-to-worker registers each discovered operation/tool through the engine HTTP invocation path. The internal grouping hint lives under `metadata.iii.virtualWorker`; the engine consumes and strips that hint before public function listing.
 
 Users, workers, and agents should only see ordinary function ids such as:
 

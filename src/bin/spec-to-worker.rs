@@ -1,9 +1,9 @@
-use artifact_worker::{init_options, register_artifact_primitives};
 use clap::{Parser, Subcommand};
+use spec_to_worker::{init_options, register_spec_to_worker_primitives};
 
 #[derive(Debug, Parser)]
-#[command(name = "artifact-worker")]
-#[command(about = "Artifact iii worker")]
+#[command(name = "spec-to-worker")]
+#[command(about = "Spec-to-worker iii worker")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -22,9 +22,9 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         Command::Serve { iii_url } => {
             let iii = iii_sdk::register_worker(&iii_url, init_options());
-            let refs = register_artifact_primitives(&iii);
+            let refs = register_spec_to_worker_primitives(&iii);
             eprintln!(
-                "artifact-worker registered {} artifact::* iii functions against {}",
+                "spec-to-worker registered {} spec-to-worker::* iii functions against {}",
                 refs.len(),
                 iii_url
             );

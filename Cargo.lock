@@ -59,22 +59,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
-name = "artifact-worker"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "iii-sdk",
- "schemars",
- "serde",
- "serde_json",
- "serde_yml",
- "tempfile",
- "thiserror",
- "ureq",
-]
-
-[[package]]
 name = "async-trait"
 version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1512,6 +1496,22 @@ checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "spec-to-worker"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "iii-sdk",
+ "schemars",
+ "serde",
+ "serde_json",
+ "serde_yml",
+ "tempfile",
+ "thiserror",
+ "ureq",
 ]
 
 [[package]]

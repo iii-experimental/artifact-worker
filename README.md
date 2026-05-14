@@ -1,14 +1,14 @@
-# artifact-worker
+# spec-to-worker
 
 Turn an OpenAPI spec or MCP server into normal iii functions.
 
-`artifact-worker` is the repo and binary name. The user-facing product is the
-`artifact::*` worker surface. Its main function is `artifact::convert`.
+`spec-to-worker` is the repo and binary name. The user-facing product is the
+`spec-to-worker::*` worker surface. Its main function is `spec-to-worker::convert`.
 
 The goal is simple:
 
 ```text
-OpenAPI or MCP input -> artifact::convert -> triggerable iii functions
+OpenAPI or MCP input -> spec-to-worker::convert -> triggerable iii functions
 ```
 
 After conversion, every other worker calls the result with ordinary
@@ -25,29 +25,29 @@ small set of stable calls:
 - `xkcd_live::get_comicid_info_0_json`
 - `petstore::find_pets_by_status`
 
-Artifact makes those functions available through iii instead of asking the agent
+Spec-to-worker makes those functions available through iii instead of asking the agent
 to inspect docs, pick tools from a huge list, or hand-wire API calls each time.
 
 ## Automatic Conversion Contract
 
-Artifact is not a prewritten integration collection. The normal path is:
+Spec-to-worker is not a prewritten integration collection. The normal path is:
 
-1. The user gives Artifact an OpenAPI URL, an MCP HTTP URL, or an MCP stdio
+1. The user gives Spec-to-worker an OpenAPI URL, an MCP HTTP URL, or an MCP stdio
    command.
-2. Artifact discovers the callable surface.
-3. Artifact registers the discovered surface as HTTP-invoked iii functions.
+2. Spec-to-worker discovers the callable surface.
+3. Spec-to-worker registers the discovered surface as HTTP-invoked iii functions.
 4. Any worker triggers those functions normally.
 
 No generated code is required for OpenAPI or MCP conversion.
 
-| Input | What Artifact discovers | What gets registered |
+| Input | What Spec-to-worker discovers | What gets registered |
 | --- | --- | --- |
 | OpenAPI JSON/YAML | `paths`, operations, methods, params, request body schemas, response schemas | One iii function per operation |
 | MCP HTTP URL | MCP initialize plus `tools/list` | One iii function per MCP tool |
 | MCP stdio command | Spawn command, initialize, `tools/list` | One iii function per MCP tool |
 
 The function IDs are generated from the source name and discovered operation or
-tool names. The caller supplies the source; Artifact handles discovery and
+tool names. The caller supplies the source; Spec-to-worker handles discovery and
 registration.
 
 ## Current Status
@@ -57,7 +57,7 @@ Working locally:
 - OpenAPI JSON and YAML conversion
 - MCP HTTP tool discovery and invocation
 - MCP stdio tool discovery and invocation
-- Function replacement when the same artifact is converted again
+- Function replacement when the same spec is converted again
 - Hidden internal grouping inside the engine
 - Public `engine::functions::list` without internal metadata
 - Public `engine::workers::list` without generated worker entries
@@ -67,7 +67,7 @@ Still pre-v1:
 - Auth handoff for protected OpenAPI endpoints is not done.
 - Write-capable APIs need a stricter safety policy before this should be used
   broadly.
-- The paired iii engine changes must ship with artifact-worker for the full
+- The paired iii engine changes must ship with spec-to-worker for the full
   hidden-group behavior.
 
 ## Install
@@ -84,16 +84,16 @@ Run the iii engine in one terminal:
 iii --use-default-config --no-update-check
 ```
 
-Run artifact-worker in another terminal:
+Run spec-to-worker in another terminal:
 
 ```bash
-cargo run --bin artifact-worker -- serve --iii-url ws://localhost:49134
+cargo run --bin spec-to-worker -- serve --iii-url ws://localhost:49134
 ```
 
 Expected worker signal:
 
 ```text
-artifact-worker registered 1 artifact::* iii functions against ws://localhost:49134
+spec-to-worker registered 1 spec-to-worker::* iii functions against ws://localhost:49134
 ```
 
 ## Convert OpenAPI
@@ -102,7 +102,7 @@ Example using the public XKCD OpenAPI spec:
 
 ```bash
 iii trigger \
-  --function-id artifact::convert \
+  --function-id spec-to-worker::convert \
   --payload '{"name":"xkcd live","sourceType":"open_api","url":"https://api.apis.guru/v2/specs/xkcd.com/1.0.0/openapi.json"}' \
   --timeout-ms 120000
 ```
@@ -156,12 +156,12 @@ Example using the Context7 MCP server through `npx`:
 
 ```bash
 iii trigger \
-  --function-id artifact::convert \
+  --function-id spec-to-worker::convert \
   --payload '{"name":"context7 stdio","sourceType":"mcp","command":"npx","args":["-y","@upstash/context7-mcp"]}' \
   --timeout-ms 180000
 ```
 
-Artifact starts the command, calls `tools/list`, and registers each tool:
+Spec-to-worker starts the command, calls `tools/list`, and registers each tool:
 
 ```json
 {
@@ -222,7 +222,7 @@ Convert it:
 
 ```bash
 iii trigger \
-  --function-id artifact::convert \
+  --function-id spec-to-worker::convert \
   --payload '{"name":"context7 http","sourceType":"mcp","url":"http://127.0.0.1:18092/mcp"}' \
   --timeout-ms 180000
 ```
@@ -256,7 +256,7 @@ Expected shape:
   {
     "function_id": "context7_stdio::query_docs",
     "metadata": {
-      "artifact": {
+      "spec": {
         "mcpTool": "query-docs",
         "mode": "http_invocation",
         "namespace": "context7_stdio",
@@ -286,7 +286,7 @@ Expected output:
 
 ## Public Payloads
 
-`artifact::convert` accepts:
+`spec-to-worker::convert` accepts:
 
 | Field | Required | Notes |
 | --- | --- | --- |
@@ -304,7 +304,7 @@ an integration file.
 
 ## Function IDs
 
-Artifact normalizes names into iii-safe IDs:
+Spec-to-worker normalizes names into iii-safe IDs:
 
 | Input | Function ID |
 | --- | --- |
@@ -312,8 +312,8 @@ Artifact normalizes names into iii-safe IDs:
 | `context7 stdio` + `query-docs` | `context7_stdio::query_docs` |
 | `docs mcp` + `search-docs` | `docs_mcp::search_docs` |
 
-If a duplicate ID appears during conversion, Artifact appends a numeric suffix.
-If the same artifact is converted again, the old generated function ref is
+If a duplicate ID appears during conversion, Spec-to-worker appends a numeric suffix.
+If the same spec is converted again, the old generated function ref is
 unregistered and replaced.
 
 ## Developer Commands

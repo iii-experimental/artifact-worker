@@ -13,13 +13,13 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
-pub type Result<T> = std::result::Result<T, ArtifactError>;
+pub type Result<T> = std::result::Result<T, SpecToWorkerError>;
 
-pub const WORKER_NAME: &str = "artifact-worker";
-pub const ARTIFACT_FUNCTION_IDS: [&str; 1] = ["artifact::convert"];
+pub const WORKER_NAME: &str = "spec-to-worker";
+pub const SPEC_TO_WORKER_FUNCTION_IDS: [&str; 1] = ["spec-to-worker::convert"];
 
 #[derive(Debug, thiserror::Error)]
-pub enum ArtifactError {
+pub enum SpecToWorkerError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("json error: {0}")]
@@ -43,7 +43,7 @@ pub enum SourceType {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ConvertArtifactInput {
+pub struct ConvertSpecToWorkerInput {
     pub name: Option<String>,
     pub goal: Option<String>,
     #[serde(alias = "source_type")]
@@ -60,7 +60,7 @@ pub struct ConvertArtifactInput {
 }
 
 #[derive(Debug, Clone)]
-struct ArtifactSource {
+struct SpecSource {
     worker_name: String,
     namespace: String,
     source_type: SourceType,
@@ -93,7 +93,7 @@ pub struct VirtualWorkerManifest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ArtifactConversion {
+pub struct SpecToWorkerConversion {
     pub ok: bool,
     pub mode: String,
     pub worker_name: String,
@@ -179,7 +179,7 @@ static VIRTUAL_BRIDGE: OnceLock<Mutex<Option<BridgeServer>>> = OnceLock::new();
 static GENERATED_FUNCTION_REFS: OnceLock<Mutex<HashMap<String, FunctionRef>>> = OnceLock::new();
 
 pub fn registered_function_ids() -> Vec<&'static str> {
-    ARTIFACT_FUNCTION_IDS.to_vec()
+    SPEC_TO_WORKER_FUNCTION_IDS.to_vec()
 }
 
 pub fn worker_metadata() -> WorkerMetadata {
@@ -206,10 +206,10 @@ pub fn init_options() -> InitOptions {
     }
 }
 
-pub fn register_artifact_primitives(iii: &iii_sdk::III) -> Vec<FunctionRef> {
+pub fn register_spec_to_worker_primitives(iii: &iii_sdk::III) -> Vec<FunctionRef> {
     iii.register_service(RegisterServiceMessage {
         id: WORKER_NAME.into(),
-        name: "Artifact Worker".into(),
+        name: "Spec-to-Worker".into(),
         description: Some(
             "Convert OpenAPI specs and MCP servers into triggerable iii functions.".into(),
         ),
@@ -218,34 +218,37 @@ pub fn register_artifact_primitives(iii: &iii_sdk::III) -> Vec<FunctionRef> {
 
     let convert_iii = iii.clone();
     vec![iii.register_function(
-        RegisterFunction::new("artifact::convert", move |input: ConvertArtifactInput| {
-            convert_artifact_for_iii(&convert_iii, input)
-        })
+        RegisterFunction::new(
+            "spec-to-worker::convert",
+            move |input: ConvertSpecToWorkerInput| {
+                convert_spec_to_worker_for_iii(&convert_iii, input)
+            },
+        )
         .description("Convert an OpenAPI spec or MCP server into triggerable iii functions."),
     )]
 }
 
-pub fn convert_artifact_for_iii(
+pub fn convert_spec_to_worker_for_iii(
     iii: &iii_sdk::III,
-    input: ConvertArtifactInput,
-) -> Result<ArtifactConversion> {
-    let artifact = input.into_artifact_source()?;
-    match artifact.source_type {
-        SourceType::OpenApi => register_openapi_virtual_worker(iii, artifact),
-        SourceType::Mcp => register_mcp_virtual_worker(iii, artifact),
-        other => Err(ArtifactError::InvalidInput(format!(
-            "artifact::convert supports open_api and mcp sources; got {other:?}"
+    input: ConvertSpecToWorkerInput,
+) -> Result<SpecToWorkerConversion> {
+    let spec = input.into_spec_source()?;
+    match spec.source_type {
+        SourceType::OpenApi => register_openapi_virtual_worker(iii, spec),
+        SourceType::Mcp => register_mcp_virtual_worker(iii, spec),
+        other => Err(SpecToWorkerError::InvalidInput(format!(
+            "spec-to-worker::convert supports open_api and mcp sources; got {other:?}"
         ))),
     }
 }
 
-impl ConvertArtifactInput {
-    fn into_artifact_source(self) -> Result<ArtifactSource> {
+impl ConvertSpecToWorkerInput {
+    fn into_spec_source(self) -> Result<SpecSource> {
         let command = match self.command {
             Some(command) => {
                 let command = command.trim().to_string();
                 if command.is_empty() {
-                    return Err(ArtifactError::InvalidInput(
+                    return Err(SpecToWorkerError::InvalidInput(
                         "command cannot be blank for MCP stdio conversion".into(),
                     ));
                 }
@@ -257,8 +260,8 @@ impl ConvertArtifactInput {
             Some(source) => {
                 let source = source.trim().to_string();
                 if source.is_empty() {
-                    return Err(ArtifactError::InvalidInput(
-                        "source/url cannot be blank for artifact::convert".into(),
+                    return Err(SpecToWorkerError::InvalidInput(
+                        "source/url cannot be blank for spec-to-worker::convert".into(),
                     ));
                 }
                 Some(source)
@@ -275,8 +278,8 @@ impl ConvertArtifactInput {
             (Some(name), _) if !name.trim().is_empty() => name.trim().to_string(),
             (_, Some(source)) => infer_name_from_source(source),
             _ => {
-                return Err(ArtifactError::InvalidInput(
-                    "provide name or url/source for artifact::convert".into(),
+                return Err(SpecToWorkerError::InvalidInput(
+                    "provide name or url/source for spec-to-worker::convert".into(),
                 ));
             }
         };
@@ -287,7 +290,7 @@ impl ConvertArtifactInput {
             .or_else(|| source.as_deref().map(infer_source_type_from_source))
             .unwrap_or_default();
 
-        Ok(ArtifactSource {
+        Ok(SpecSource {
             worker_name: format!("{}-worker", namespace.replace('_', "-")),
             namespace,
             source_type,
@@ -302,36 +305,36 @@ impl ConvertArtifactInput {
 
 fn register_openapi_virtual_worker(
     iii: &iii_sdk::III,
-    artifact: ArtifactSource,
-) -> Result<ArtifactConversion> {
-    let source = artifact.source.as_deref().ok_or_else(|| {
-        ArtifactError::InvalidInput("OpenAPI conversion requires url/source".into())
+    spec_source: SpecSource,
+) -> Result<SpecToWorkerConversion> {
+    let source = spec_source.source.as_deref().ok_or_else(|| {
+        SpecToWorkerError::InvalidInput("OpenAPI conversion requires url/source".into())
     })?;
     let spec_text = fetch_text_for_conversion(source)?;
-    let spec = parse_openapi_spec(&spec_text)?;
-    let virtual_functions = openapi_virtual_functions(&artifact, source, &spec)?;
-    register_virtual_worker(iii, &artifact, virtual_functions, "http_invocation")
+    let openapi_spec = parse_openapi_spec(&spec_text)?;
+    let virtual_functions = openapi_virtual_functions(&spec_source, source, &openapi_spec)?;
+    register_virtual_worker(iii, &spec_source, virtual_functions, "http_invocation")
 }
 
 fn register_mcp_virtual_worker(
     iii: &iii_sdk::III,
-    artifact: ArtifactSource,
-) -> Result<ArtifactConversion> {
-    let transport = mcp_transport_from_artifact(&artifact)?;
-    let virtual_functions = if artifact.functions.is_empty() {
-        mcp_discovered_virtual_functions(&artifact, &transport)?
+    spec: SpecSource,
+) -> Result<SpecToWorkerConversion> {
+    let transport = mcp_transport_from_spec(&spec)?;
+    let virtual_functions = if spec.functions.is_empty() {
+        mcp_discovered_virtual_functions(&spec, &transport)?
     } else {
-        mcp_named_virtual_functions(&artifact, &transport)
+        mcp_named_virtual_functions(&spec, &transport)
     };
-    register_virtual_worker(iii, &artifact, virtual_functions, "http_invocation")
+    register_virtual_worker(iii, &spec, virtual_functions, "http_invocation")
 }
 
 fn register_virtual_worker(
     iii: &iii_sdk::III,
-    artifact: &ArtifactSource,
+    spec: &SpecSource,
     virtual_functions: Vec<VirtualHttpFunction>,
     mode: &str,
-) -> Result<ArtifactConversion> {
+) -> Result<SpecToWorkerConversion> {
     let mut registered_functions = Vec::new();
     for function in virtual_functions {
         let method_label = http_method_label(&function.method).to_string();
@@ -345,7 +348,7 @@ fn register_virtual_worker(
             invocation: None,
         };
         let mut refs = generated_function_refs().lock().map_err(|_| {
-            ArtifactError::InvalidInput("generated function registry lock poisoned".into())
+            SpecToWorkerError::InvalidInput("generated function registry lock poisoned".into())
         })?;
         if let Some(existing) = refs.remove(&function.function_id) {
             existing.unregister();
@@ -372,21 +375,21 @@ fn register_virtual_worker(
     }
 
     let manifest = VirtualWorkerManifest {
-        schema: "artifact-worker.http-invocation.v1".into(),
-        worker_name: artifact.worker_name.clone(),
-        namespace: artifact.namespace.clone(),
-        source_type: artifact.source_type.clone(),
-        source: artifact.source.clone(),
+        schema: "spec-to-worker.http-invocation.v1".into(),
+        worker_name: spec.worker_name.clone(),
+        namespace: spec.namespace.clone(),
+        source_type: spec.source_type.clone(),
+        source: spec.source.clone(),
         functions: registered_functions.clone(),
     };
 
-    Ok(ArtifactConversion {
+    Ok(SpecToWorkerConversion {
         ok: true,
         mode: mode.into(),
-        worker_name: artifact.worker_name.clone(),
-        namespace: artifact.namespace.clone(),
-        source_type: artifact.source_type.clone(),
-        source: artifact.source.clone(),
+        worker_name: spec.worker_name.clone(),
+        namespace: spec.namespace.clone(),
+        source_type: spec.source_type.clone(),
+        source: spec.source.clone(),
         function_count: registered_functions.len(),
         registered_functions,
         manifest,
@@ -398,15 +401,15 @@ fn register_virtual_worker(
 }
 
 fn openapi_virtual_functions(
-    artifact: &ArtifactSource,
+    spec_source: &SpecSource,
     source: &str,
-    spec: &Value,
+    openapi_spec: &Value,
 ) -> Result<Vec<VirtualHttpFunction>> {
-    let paths = spec
+    let paths = openapi_spec
         .get("paths")
         .and_then(Value::as_object)
-        .ok_or_else(|| ArtifactError::InvalidInput("OpenAPI spec is missing paths".into()))?;
-    let base_url = openapi_base_url(spec, source)?;
+        .ok_or_else(|| SpecToWorkerError::InvalidInput("OpenAPI spec is missing paths".into()))?;
+    let base_url = openapi_base_url(openapi_spec, source)?;
     let mut seen = HashSet::new();
     let mut operations = Vec::new();
     let mut path_entries = paths.iter().collect::<Vec<_>>();
@@ -431,7 +434,7 @@ fn openapi_virtual_functions(
                 continue;
             };
             let function_id = unique_function_id(
-                &artifact.namespace,
+                &spec_source.namespace,
                 operation
                     .get("operationId")
                     .and_then(Value::as_str)
@@ -456,8 +459,8 @@ fn openapi_virtual_functions(
                 description,
                 request_format: Some(openapi_request_format(&parameters, operation)),
                 response_format: openapi_response_format(operation),
-                metadata: artifact_metadata(
-                    artifact,
+                metadata: spec_to_worker_metadata(
+                    spec_source,
                     serde_json::json!({
                         "path": path,
                         "method": method.to_uppercase()
@@ -468,7 +471,7 @@ fn openapi_virtual_functions(
     }
 
     if operations.is_empty() {
-        return Err(ArtifactError::InvalidInput(
+        return Err(SpecToWorkerError::InvalidInput(
             "OpenAPI spec did not expose any HTTP operations".into(),
         ));
     }
@@ -476,13 +479,13 @@ fn openapi_virtual_functions(
 }
 
 fn mcp_discovered_virtual_functions(
-    artifact: &ArtifactSource,
+    spec: &SpecSource,
     transport: &McpTransport,
 ) -> Result<Vec<VirtualHttpFunction>> {
     let source = transport.source_label();
     let tools = mcp_list_tools(transport)?;
     if tools.is_empty() {
-        return Err(ArtifactError::InvalidInput(
+        return Err(SpecToWorkerError::InvalidInput(
             "MCP server did not expose any tools".into(),
         ));
     }
@@ -491,8 +494,7 @@ fn mcp_discovered_virtual_functions(
     Ok(tools
         .into_iter()
         .map(|tool| {
-            let function_id =
-                unique_function_id(&artifact.namespace, slugify(&tool.name), &mut seen);
+            let function_id = unique_function_id(&spec.namespace, slugify(&tool.name), &mut seen);
             let description = tool
                 .description
                 .clone()
@@ -509,23 +511,25 @@ fn mcp_discovered_virtual_functions(
                 description,
                 request_format: Some(tool.input_schema),
                 response_format: tool.output_schema,
-                metadata: artifact_metadata(artifact, serde_json::json!({ "mcpTool": tool.name })),
+                metadata: spec_to_worker_metadata(
+                    spec,
+                    serde_json::json!({ "mcpTool": tool.name }),
+                ),
             }
         })
         .collect())
 }
 
 fn mcp_named_virtual_functions(
-    artifact: &ArtifactSource,
+    spec: &SpecSource,
     transport: &McpTransport,
 ) -> Vec<VirtualHttpFunction> {
     let source = transport.source_label();
     let mut seen = HashSet::new();
-    artifact
-        .functions
+    spec.functions
         .iter()
         .map(|function| {
-            let local_name = function_local_name(function, &artifact.namespace);
+            let local_name = function_local_name(function, &spec.namespace);
             let local_slug = slugify(&local_name);
             let invocation = match local_slug.as_str() {
                 "tools_list" => VirtualInvocation::McpToolsList,
@@ -536,15 +540,15 @@ fn mcp_named_virtual_functions(
             };
             let metadata = match &invocation {
                 VirtualInvocation::McpTool { tool_name } => {
-                    artifact_metadata(artifact, serde_json::json!({ "mcpTool": tool_name }))
+                    spec_to_worker_metadata(spec, serde_json::json!({ "mcpTool": tool_name }))
                 }
                 VirtualInvocation::McpToolsList | VirtualInvocation::McpToolCall => {
-                    artifact_metadata(artifact, serde_json::json!({}))
+                    spec_to_worker_metadata(spec, serde_json::json!({}))
                 }
-                VirtualInvocation::Http => artifact_metadata(artifact, serde_json::json!({})),
+                VirtualInvocation::Http => spec_to_worker_metadata(spec, serde_json::json!({})),
             };
             VirtualHttpFunction {
-                function_id: unique_function_id(&artifact.namespace, local_slug, &mut seen),
+                function_id: unique_function_id(&spec.namespace, local_slug, &mut seen),
                 url: source.clone(),
                 method: HttpMethod::Post,
                 mcp_transport: Some(transport.clone()),
@@ -558,33 +562,27 @@ fn mcp_named_virtual_functions(
         .collect()
 }
 
-fn artifact_metadata(artifact: &ArtifactSource, extra: Value) -> Value {
-    let mut artifact_meta = serde_json::Map::new();
-    artifact_meta.insert("mode".into(), Value::String("http_invocation".into()));
-    artifact_meta.insert(
+fn spec_to_worker_metadata(spec: &SpecSource, extra: Value) -> Value {
+    let mut spec_meta = serde_json::Map::new();
+    spec_meta.insert("mode".into(), Value::String("http_invocation".into()));
+    spec_meta.insert(
         "sourceType".into(),
-        Value::String(source_type_label(&artifact.source_type).into()),
+        Value::String(source_type_label(&spec.source_type).into()),
     );
-    if let Some(source) = &artifact.source {
-        artifact_meta.insert("source".into(), Value::String(source.clone()));
+    if let Some(source) = &spec.source {
+        spec_meta.insert("source".into(), Value::String(source.clone()));
     }
-    artifact_meta.insert(
-        "workerName".into(),
-        Value::String(artifact.worker_name.clone()),
-    );
-    artifact_meta.insert(
-        "namespace".into(),
-        Value::String(artifact.namespace.clone()),
-    );
+    spec_meta.insert("workerName".into(), Value::String(spec.worker_name.clone()));
+    spec_meta.insert("namespace".into(), Value::String(spec.namespace.clone()));
     if let Value::Object(extra) = extra {
         for (key, value) in extra {
-            artifact_meta.insert(key, value);
+            spec_meta.insert(key, value);
         }
     }
     serde_json::json!({
-        "artifact": artifact_meta,
+        "spec": spec_meta,
         "iii": {
-            "virtualWorker": { "name": artifact.worker_name }
+            "virtualWorker": { "name": spec.worker_name }
         }
     })
 }
@@ -610,20 +608,16 @@ impl McpTransport {
     }
 }
 
-fn mcp_transport_from_artifact(artifact: &ArtifactSource) -> Result<McpTransport> {
-    if let Some(command) = artifact
-        .command
-        .as_deref()
-        .filter(|value| !value.is_empty())
-    {
+fn mcp_transport_from_spec(spec: &SpecSource) -> Result<McpTransport> {
+    if let Some(command) = spec.command.as_deref().filter(|value| !value.is_empty()) {
         return Ok(McpTransport::Stdio(McpStdioConfig {
             command: command.to_string(),
-            args: artifact.args.clone(),
-            env: artifact.env.clone(),
+            args: spec.args.clone(),
+            env: spec.env.clone(),
         }));
     }
-    let source = artifact.source.as_deref().ok_or_else(|| {
-        ArtifactError::InvalidInput("MCP conversion requires url/source or command".into())
+    let source = spec.source.as_deref().ok_or_else(|| {
+        SpecToWorkerError::InvalidInput("MCP conversion requires url/source or command".into())
     })?;
     if source.starts_with("http://") || source.starts_with("https://") {
         return Ok(McpTransport::Http(source.to_string()));
@@ -631,7 +625,7 @@ fn mcp_transport_from_artifact(artifact: &ArtifactSource) -> Result<McpTransport
     if let Some(command_line) = source.strip_prefix("stdio:") {
         return mcp_stdio_transport_from_source(command_line);
     }
-    Err(ArtifactError::InvalidInput(
+    Err(SpecToWorkerError::InvalidInput(
         "MCP conversion requires an HTTP endpoint or stdio command".into(),
     ))
 }
@@ -642,7 +636,7 @@ fn mcp_stdio_transport_from_source(command_line: &str) -> Result<McpTransport> {
         .map(str::to_string)
         .collect::<Vec<_>>();
     let Some(command) = parts.first().filter(|value| !value.is_empty()) else {
-        return Err(ArtifactError::InvalidInput(
+        return Err(SpecToWorkerError::InvalidInput(
             "stdio MCP source requires a command".into(),
         ));
     };
@@ -665,7 +659,7 @@ fn mcp_list_tools(transport: &McpTransport) -> Result<Vec<McpToolSpec>> {
         return serde_json::from_value::<McpListToolsResult>(result)
             .map(|result| result.tools)
             .map_err(|error| {
-                ArtifactError::InvalidInput(format!("invalid MCP tools/list: {error}"))
+                SpecToWorkerError::InvalidInput(format!("invalid MCP tools/list: {error}"))
             });
     }
     let session_id = mcp_initialize(transport)?;
@@ -673,7 +667,9 @@ fn mcp_list_tools(transport: &McpTransport) -> Result<Vec<McpToolSpec>> {
     let result = mcp_json_rpc(transport, "tools/list", None, session_id.as_deref())?;
     serde_json::from_value::<McpListToolsResult>(result)
         .map(|result| result.tools)
-        .map_err(|error| ArtifactError::InvalidInput(format!("invalid MCP tools/list: {error}")))
+        .map_err(|error| {
+            SpecToWorkerError::InvalidInput(format!("invalid MCP tools/list: {error}"))
+        })
 }
 
 fn mcp_tool_call(transport: &McpTransport, tool_name: &str, arguments: Value) -> Result<Value> {
@@ -705,7 +701,7 @@ fn mcp_initialize(transport: &McpTransport) -> Result<Option<String>> {
         "protocolVersion": "2025-06-18",
         "capabilities": {},
         "clientInfo": {
-            "name": "artifact-worker",
+            "name": "spec-to-worker",
             "version": env!("CARGO_PKG_VERSION")
         }
     });
@@ -723,7 +719,7 @@ fn mcp_send_initialized_notification(
     });
     let (status, text, _) = send_mcp_message(transport, &notification, session_id)?;
     if status >= 400 {
-        return Err(ArtifactError::InvalidInput(format!(
+        return Err(SpecToWorkerError::InvalidInput(format!(
             "MCP notifications/initialized HTTP {status}: {text}"
         )));
     }
@@ -756,13 +752,13 @@ fn mcp_json_rpc_with_session(
 
     let (status, text, next_session_id) = send_mcp_message(transport, &request, session_id)?;
     if status >= 400 {
-        return Err(ArtifactError::InvalidInput(format!(
+        return Err(SpecToWorkerError::InvalidInput(format!(
             "MCP {method} HTTP {status}: {text}"
         )));
     }
     let value = parse_mcp_http_body(&text)?;
     if let Some(error) = value.get("error") {
-        return Err(ArtifactError::InvalidInput(format!(
+        return Err(SpecToWorkerError::InvalidInput(format!(
             "MCP {method} error: {error}"
         )));
     }
@@ -779,7 +775,7 @@ fn send_mcp_message(
 ) -> Result<(u16, String, Option<String>)> {
     match transport {
         McpTransport::Http(url) => send_mcp_http(url, body, session_id),
-        McpTransport::Stdio(_) => Err(ArtifactError::InvalidInput(
+        McpTransport::Stdio(_) => Err(SpecToWorkerError::InvalidInput(
             "stdio MCP uses a per-call session and cannot send standalone messages".into(),
         )),
     }
@@ -796,7 +792,7 @@ fn send_mcp_http(
     let body_text = serde_json::to_string(body)?;
     let mut request = agent
         .post(url)
-        .set("User-Agent", "artifact-worker/0.1")
+        .set("User-Agent", "spec-to-worker/0.1")
         .set("Content-Type", "application/json")
         .set("Accept", "application/json, text/event-stream");
     if let Some(session_id) = session_id {
@@ -809,7 +805,7 @@ fn send_mcp_http(
             let session_id = response.header("Mcp-Session-Id").map(str::to_string);
             let text = response
                 .into_string()
-                .map_err(|error| ArtifactError::InvalidInput(error.to_string()))?;
+                .map_err(|error| SpecToWorkerError::InvalidInput(error.to_string()))?;
             Ok((status, text, session_id))
         }
         Err(ureq::Error::Status(status, response)) => {
@@ -817,7 +813,7 @@ fn send_mcp_http(
             let text = response.into_string().unwrap_or_default();
             Ok((status, text, session_id))
         }
-        Err(error) => Err(ArtifactError::InvalidInput(error.to_string())),
+        Err(error) => Err(SpecToWorkerError::InvalidInput(error.to_string())),
     }
 }
 
@@ -834,7 +830,7 @@ fn mcp_stdio_json_rpc(
         .stderr(Stdio::null())
         .spawn()
         .map_err(|error| {
-            ArtifactError::InvalidInput(format!(
+            SpecToWorkerError::InvalidInput(format!(
                 "failed to start MCP stdio command '{}': {error}",
                 config.command
             ))
@@ -842,11 +838,11 @@ fn mcp_stdio_json_rpc(
     let mut stdin = child
         .stdin
         .take()
-        .ok_or_else(|| ArtifactError::InvalidInput("MCP stdio stdin unavailable".into()))?;
+        .ok_or_else(|| SpecToWorkerError::InvalidInput("MCP stdio stdin unavailable".into()))?;
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| ArtifactError::InvalidInput("MCP stdio stdout unavailable".into()))?;
+        .ok_or_else(|| SpecToWorkerError::InvalidInput("MCP stdio stdout unavailable".into()))?;
     let mut stdout = BufReader::new(stdout);
 
     let initialize = serde_json::json!({
@@ -857,7 +853,7 @@ fn mcp_stdio_json_rpc(
             "protocolVersion": "2025-06-18",
             "capabilities": {},
             "clientInfo": {
-                "name": "artifact-worker",
+                "name": "spec-to-worker",
                 "version": env!("CARGO_PKG_VERSION")
             }
         }
@@ -902,7 +898,7 @@ fn read_mcp_stdio_response(stdout: &mut impl BufRead, expected_id: i64) -> Resul
         line.clear();
         let read = stdout.read_line(&mut line)?;
         if read == 0 {
-            return Err(ArtifactError::InvalidInput(
+            return Err(SpecToWorkerError::InvalidInput(
                 "MCP stdio server closed stdout before response".into(),
             ));
         }
@@ -917,7 +913,7 @@ fn read_mcp_stdio_response(stdout: &mut impl BufRead, expected_id: i64) -> Resul
             continue;
         }
         if let Some(error) = value.get("error") {
-            return Err(ArtifactError::InvalidInput(format!(
+            return Err(SpecToWorkerError::InvalidInput(format!(
                 "MCP stdio error: {error}"
             )));
         }
@@ -934,9 +930,9 @@ fn parse_mcp_http_body(text: &str) -> Result<Value> {
         return Ok(value);
     }
     if let Some(data) = first_sse_data(trimmed) {
-        return serde_json::from_str::<Value>(&data).map_err(ArtifactError::from);
+        return serde_json::from_str::<Value>(&data).map_err(SpecToWorkerError::from);
     }
-    Err(ArtifactError::InvalidInput(
+    Err(SpecToWorkerError::InvalidInput(
         "MCP response was not JSON or SSE JSON".into(),
     ))
 }
@@ -961,20 +957,20 @@ fn fetch_text_for_conversion(source: &str) -> Result<String> {
             .timeout(std::time::Duration::from_secs(20))
             .build()
             .get(source)
-            .set("User-Agent", "artifact-worker/0.1")
+            .set("User-Agent", "spec-to-worker/0.1")
             .call()
-            .map_err(|error| ArtifactError::InvalidInput(error.to_string()))?
+            .map_err(|error| SpecToWorkerError::InvalidInput(error.to_string()))?
             .into_string()
-            .map_err(|error| ArtifactError::InvalidInput(error.to_string()));
+            .map_err(|error| SpecToWorkerError::InvalidInput(error.to_string()));
     }
-    fs::read_to_string(source).map_err(ArtifactError::from)
+    fs::read_to_string(source).map_err(SpecToWorkerError::from)
 }
 
 fn parse_openapi_spec(spec_text: &str) -> Result<Value> {
     match serde_json::from_str(spec_text) {
         Ok(spec) => Ok(spec),
         Err(json_error) => serde_yml::from_str(spec_text).map_err(|yaml_error| {
-            ArtifactError::InvalidInput(format!(
+            SpecToWorkerError::InvalidInput(format!(
                 "failed to parse OpenAPI as JSON ({json_error}) or YAML ({yaml_error})"
             ))
         }),
@@ -1016,7 +1012,7 @@ fn openapi_base_url(spec: &Value, source: &str) -> Result<String> {
             .into());
     }
     url_origin(source).ok_or_else(|| {
-        ArtifactError::InvalidInput(
+        SpecToWorkerError::InvalidInput(
             "OpenAPI spec needs servers[0].url, host, or an absolute source URL".into(),
         )
     })
@@ -1130,7 +1126,7 @@ fn register_bridge_function(function: &VirtualHttpFunction) -> Result<String> {
     bridge
         .functions
         .lock()
-        .map_err(|_| ArtifactError::InvalidInput("bridge registry lock poisoned".into()))?
+        .map_err(|_| SpecToWorkerError::InvalidInput("bridge registry lock poisoned".into()))?
         .insert(key.clone(), function.clone());
     Ok(format!("{}/invoke/{}", bridge.base_url, key))
 }
@@ -1139,7 +1135,7 @@ fn bridge_server() -> Result<BridgeServer> {
     let slot = VIRTUAL_BRIDGE.get_or_init(|| Mutex::new(None));
     let mut guard = slot
         .lock()
-        .map_err(|_| ArtifactError::InvalidInput("bridge server lock poisoned".into()))?;
+        .map_err(|_| SpecToWorkerError::InvalidInput("bridge server lock poisoned".into()))?;
     if let Some(server) = guard.clone() {
         return Ok(server);
     }
@@ -1169,14 +1165,16 @@ fn handle_bridge_connection(
 ) {
     let response = match read_bridge_request(&mut stream).and_then(|request| {
         let Some(key) = request.path.strip_prefix("/invoke/") else {
-            return Err(ArtifactError::InvalidInput("unknown bridge route".into()));
+            return Err(SpecToWorkerError::InvalidInput(
+                "unknown bridge route".into(),
+            ));
         };
         let function = functions
             .lock()
-            .map_err(|_| ArtifactError::InvalidInput("bridge registry lock poisoned".into()))?
+            .map_err(|_| SpecToWorkerError::InvalidInput("bridge registry lock poisoned".into()))?
             .get(key)
             .cloned()
-            .ok_or_else(|| ArtifactError::InvalidInput("unknown bridge function".into()))?;
+            .ok_or_else(|| SpecToWorkerError::InvalidInput("unknown bridge function".into()))?;
         let payload = if request.body.is_empty() {
             serde_json::json!({})
         } else {
@@ -1189,7 +1187,7 @@ fn handle_bridge_connection(
             500,
             serde_json::json!({
                 "error": {
-                    "code": "artifact_bridge_error",
+                    "code": "spec_bridge_error",
                     "message": error.to_string()
                 }
             }),
@@ -1205,14 +1203,16 @@ fn read_bridge_request(stream: &mut TcpStream) -> Result<BridgeRequest> {
     let header_end = loop {
         let read = stream.read(&mut temp)?;
         if read == 0 {
-            return Err(ArtifactError::InvalidInput("empty bridge request".into()));
+            return Err(SpecToWorkerError::InvalidInput(
+                "empty bridge request".into(),
+            ));
         }
         buffer.extend_from_slice(&temp[..read]);
         if let Some(index) = find_header_end(&buffer) {
             break index;
         }
         if buffer.len() > 1024 * 1024 {
-            return Err(ArtifactError::InvalidInput(
+            return Err(SpecToWorkerError::InvalidInput(
                 "bridge request too large".into(),
             ));
         }
@@ -1222,11 +1222,11 @@ fn read_bridge_request(stream: &mut TcpStream) -> Result<BridgeRequest> {
     let mut lines = headers_text.lines();
     let request_line = lines
         .next()
-        .ok_or_else(|| ArtifactError::InvalidInput("missing bridge request line".into()))?;
+        .ok_or_else(|| SpecToWorkerError::InvalidInput("missing bridge request line".into()))?;
     let path = request_line
         .split_whitespace()
         .nth(1)
-        .ok_or_else(|| ArtifactError::InvalidInput("missing bridge request path".into()))?
+        .ok_or_else(|| SpecToWorkerError::InvalidInput("missing bridge request path".into()))?
         .to_string();
     let content_length = lines
         .filter_map(|line| line.split_once(':'))
@@ -1255,20 +1255,20 @@ fn invoke_virtual_http_function(function: &VirtualHttpFunction, payload: Value) 
         VirtualInvocation::Http => invoke_plain_virtual_http_function(function, payload),
         VirtualInvocation::McpTool { tool_name } => mcp_tool_call(
             function.mcp_transport.as_ref().ok_or_else(|| {
-                ArtifactError::InvalidInput("MCP function is missing transport".into())
+                SpecToWorkerError::InvalidInput("MCP function is missing transport".into())
             })?,
             tool_name,
             payload,
         ),
         VirtualInvocation::McpToolsList => {
             mcp_list_tools(function.mcp_transport.as_ref().ok_or_else(|| {
-                ArtifactError::InvalidInput("MCP function is missing transport".into())
+                SpecToWorkerError::InvalidInput("MCP function is missing transport".into())
             })?)
             .map(|tools| serde_json::json!({ "tools": tools }))
         }
         VirtualInvocation::McpToolCall => {
             let tool_name = payload.get("name").and_then(Value::as_str).ok_or_else(|| {
-                ArtifactError::InvalidInput("MCP tool_call payload requires name".into())
+                SpecToWorkerError::InvalidInput("MCP tool_call payload requires name".into())
             })?;
             let arguments = payload
                 .get("arguments")
@@ -1276,7 +1276,7 @@ fn invoke_virtual_http_function(function: &VirtualHttpFunction, payload: Value) 
                 .unwrap_or_else(|| serde_json::json!({}));
             mcp_tool_call(
                 function.mcp_transport.as_ref().ok_or_else(|| {
-                    ArtifactError::InvalidInput("MCP function is missing transport".into())
+                    SpecToWorkerError::InvalidInput("MCP function is missing transport".into())
                 })?,
                 tool_name,
                 arguments,
@@ -1303,29 +1303,29 @@ fn send_virtual_http(method: &HttpMethod, url: &str, body: &Value) -> Result<(u1
     let result = match method {
         HttpMethod::Get => agent
             .get(url)
-            .set("User-Agent", "artifact-worker/0.1")
+            .set("User-Agent", "spec-to-worker/0.1")
             .call(),
         HttpMethod::Post => agent
             .post(url)
-            .set("User-Agent", "artifact-worker/0.1")
+            .set("User-Agent", "spec-to-worker/0.1")
             .set("Content-Type", "application/json")
             .set("Accept", "application/json, text/event-stream")
             .send_string(&body_text),
         HttpMethod::Put => agent
             .put(url)
-            .set("User-Agent", "artifact-worker/0.1")
+            .set("User-Agent", "spec-to-worker/0.1")
             .set("Content-Type", "application/json")
             .set("Accept", "application/json, text/event-stream")
             .send_string(&body_text),
         HttpMethod::Patch => agent
             .request("PATCH", url)
-            .set("User-Agent", "artifact-worker/0.1")
+            .set("User-Agent", "spec-to-worker/0.1")
             .set("Content-Type", "application/json")
             .set("Accept", "application/json, text/event-stream")
             .send_string(&body_text),
         HttpMethod::Delete => agent
             .delete(url)
-            .set("User-Agent", "artifact-worker/0.1")
+            .set("User-Agent", "spec-to-worker/0.1")
             .set("Content-Type", "application/json")
             .set("Accept", "application/json, text/event-stream")
             .send_string(&body_text),
@@ -1335,14 +1335,14 @@ fn send_virtual_http(method: &HttpMethod, url: &str, body: &Value) -> Result<(u1
             let status = response.status();
             let text = response
                 .into_string()
-                .map_err(|error| ArtifactError::InvalidInput(error.to_string()))?;
+                .map_err(|error| SpecToWorkerError::InvalidInput(error.to_string()))?;
             Ok((status, text))
         }
         Err(ureq::Error::Status(status, response)) => {
             let text = response.into_string().unwrap_or_default();
             Ok((status, text))
         }
-        Err(error) => Err(ArtifactError::InvalidInput(error.to_string())),
+        Err(error) => Err(SpecToWorkerError::InvalidInput(error.to_string())),
     }
 }
 
@@ -1566,7 +1566,7 @@ fn infer_name_from_source(source: &str) -> String {
         .collect::<Vec<_>>();
 
     if parts.len() >= 5 && parts[0].contains("github.com") && matches!(parts[3], "tree" | "blob") {
-        return parts.last().copied().unwrap_or("artifact").to_string();
+        return parts.last().copied().unwrap_or("spec").to_string();
     }
     if parts.len() >= 3 && parts[0].contains("github.com") {
         return format!("{}-{}", parts[1], parts[2]);
@@ -1576,7 +1576,7 @@ fn infer_name_from_source(source: &str) -> String {
         .last()
         .copied()
         .filter(|part| !part.is_empty())
-        .unwrap_or("artifact")
+        .unwrap_or("spec")
         .trim_end_matches(".json")
         .trim_end_matches(".yaml")
         .trim_end_matches(".yml")
@@ -1600,7 +1600,7 @@ fn slugify(value: &str) -> String {
         out.pop();
     }
     if out.is_empty() {
-        "artifact".into()
+        "spec".into()
     } else {
         out
     }
