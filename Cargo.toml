@@ -1,18 +1,18 @@
 [package]
-name = "artifact-worker"
+name = "spec-to-worker"
 version = "0.1.0"
 edition = "2021"
 description = "Convert OpenAPI specs and MCP servers into triggerable iii functions."
 license = "MIT"
-repository = "https://github.com/iii-experimental/artifact-worker"
+repository = "https://github.com/iii-experimental/spec-to-worker"
 
 [lib]
-name = "artifact_worker"
+name = "spec_to_worker"
 path = "src/lib.rs"
 
 [[bin]]
-name = "artifact-worker"
-path = "src/bin/artifact-worker.rs"
+name = "spec-to-worker"
+path = "src/bin/spec-to-worker.rs"
 
 [dependencies]
 anyhow = "1.0"

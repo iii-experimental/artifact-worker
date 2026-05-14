@@ -1,6 +1,6 @@
-name: artifact-worker
+name: spec-to-worker
 description: Convert OpenAPI specs and MCP servers into triggerable iii functions.
 language: rust
-entrypoint: cargo run --bin artifact-worker -- serve
+entrypoint: cargo run --bin spec-to-worker -- serve
 functions:
-  - artifact::convert
+  - spec-to-worker::convert
